@@ -1,0 +1,47 @@
+1. main함수에서 배열의 주소를 인자로 넣고, 다른 함수에서는 포인터로 메인함수에 있는 배열의 주소를 받아왔으면, 그 함수에서는
+ output_1[i][k][p] 로 쓰면 안되고
+output_1[(i*N) + (k*ROW) + (p)] 로 써야한다.
+
+예시코드) ~
+
+2. 1번과 비슷한 내용인데
+다차원 배열을 함수로 보내면 함수에서 포인터를 매개변수로 받을 수 없다. 포인터로 주소를 받기 위해서는 함수호출할때 평탄화된 (1차원) 배열로 보내야한다.
+
+3. 근데 호출할 때 주소를 &output_1[0][0][0] 로 보내주면 포인터로 받을 수 있다!
+
+
+4. fread를 할 때는 반복문을 사용하지 않더라도 자동으로 쭉~ 저장되는데
+fscanf를 사용할 때는 반복문을 사용해서 일일이 넣어주어야한다.
+
+예시 코드)
+for (int i = 0; i < N; i++) {
+    for (int j = 0; j < M; j++) {
+        fscanf(fp_weight, "%f", &weight[i][j]);
+    }
+} 
+
+5. fscanf를 할 때, txt 파일 안의 값들이 쉼표로 나뉘어있다면 for문을 돌렸을 때 값을 제대로 읽어올 수 없다. 이럴때는 fscanf(fp_weight, "%f,", &weight[i][j]); 와 같이 쉼표도 소비해줘야한다.
+
+6. 과정마다 값을 확인할 때 printf 문으로는 방대한 양의 값을 확인하지 못하기때문에 파일로 fwrite하는 함수를 만들어주었다. 
+
+예시코드) ~
+
+
+7. point, 즉 1차원배열로 다룰때는 
+for(int j = 0; j < ROW; j++) {
+            for(int k = 0; k < COLUMN; k++) {
+                for(int p = 0; p < DK; p++) {
+                    for(int u = 0; u < DK; u++){
+                        output_2[ (i*ROW*COLUMN) + (j*ROW) + (k)]
+
+다차원배열로 다룰때는
+for(int j = 0; j < ROW; j++) {
+            for(int k = 0; k < COLUMN; k++) {
+                for(int p = 0; p < DK; p++) {
+                    for(int u = 0; u < DK; u++){
+                        output_2[ (i*ROW*COLUMN) + (j*ROW) + (k)] += output_1_padded[i][ j +p ][ k+u ] * weight[i][p][u];
+
+
+
+8. txt 파일에서 값을 읽어올 때 값들이 여백으로 이어져있으면 fscanf(fp_weight, "%f", &weight[(in_channel*i) + j]); 이렇게 그냥 &f를 해주면 되고,
+값들이 쉼표로 이어져있으면 fscanf(fp_weight, "%f,", &weight[(in_channel*i) + j]); 처럼 f다음에 , 를 추가해줘야 제대로 읽어온다.
