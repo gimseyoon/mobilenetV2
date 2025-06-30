@@ -287,11 +287,11 @@ void DEPTHWISE(float *in, float *out)
     //////////////////////////////////////////////////////////////////////////////////////////////////////     
 
     for(int i=0; i < N; i++){     // Number of multiplication operations : N * DF * DF * DK * DK
-        for(int j = 0; j < ROW; j++) {
-            for(int k = 0; k < COLUMN; k++) {
+        for(int j = 0; j < (ROW-DK+2*Z)/2+1; j++) {
+            for(int k = 0; k < (COLUMN-DK+2*Z)/2+1; k++) {
                 for(int p = 0; p < DK; p++) {
                     for(int u = 0; u < DK; u++){
-                        out[ (i*ROW*COLUMN) + (j*COLUMN) + (k)] += output_1_padded[i][ j +p ][ k+u ] * weight[i][p][u];
+                        out[ (i*ROW*COLUMN) + (j*COLUMN) + (k)] += output_1_padded[i][ j*2 +p ][ k*2 +u ] * weight[i][p][u];
                     }
                 }     
             }  
@@ -312,7 +312,7 @@ void BATCH_NORMALIZATION(int bn_num, float *data)
 
 
     //////////////////////////////////////////////////////////////////////////////////////////////////////
-    // SET 'CHANNEL' and 'file path'  /////////////////////////////////////////////////////////////
+    // SET 'CHANNEL' and 'file path'  ////////////////////////////////////////////////////////////////////
     //////////////////////////////////////////////////////////////////////////////////////////////////////    
     if (bn_num == 1) {
         CHANNEL = 384;
