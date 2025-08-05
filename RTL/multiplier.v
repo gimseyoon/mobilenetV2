@@ -1,0 +1,73 @@
+// Module multiplier: 
+// receives 20 bit * [196] mul_in, multiplies each by a 17 bit mul_weight,
+// and outputs the result as 20bit [196] mul_out.
+
+`timescale 1ns / 1ps
+
+module multiplier#(
+    parameter IO_WIDTH = 18,
+    parameter ROW = 14,
+    parameter COLUMN = 14,
+    parameter PIXEL = ROW*COLUMN, //// 14 * 14 = 196 PIXEL
+    parameter W_WIDTH = 17
+)(
+    input                                       clk,
+    input                                       rst_n,
+    input   signed [IO_WIDTH * PIXEL - 1 : 0]   mul_in,  // [3920-1 : 0], 3920 bit
+    input   signed [W_WIDTH - 1 : 0]            mul_weight,   // [17-1:0], 17 bit
+    output  signed [IO_WIDTH * PIXEL - 1 : 0]   mul_out  // [3920-1 : 0], 3920 bit
+    );
+/////////////////////////////////////////////////////////////////////////
+
+    reg signed [IO_WIDTH-1 :0] mul_out_reg [PIXEL-1 :0]; // [384][14][14]
+    wire signed [36:0] mul_out_w [PIXEL-1:0]; //[196-1 :0]
+    
+/////////////////////////////////////////////////////////////////////////
+// concat : mul_out_reg <= { mul_out_w[k][36] , mul_out_w[k][34 :16] }
+
+    integer k;
+    always@(posedge clk or negedge rst_n) begin
+        if(!rst_n) begin
+            for(k=0; k < PIXEL; k = k+1) begin
+                mul_out_reg[k] <= 0;
+            end
+        end
+        else begin
+                for(k=0; k < PIXEL; k = k+1) begin
+                    mul_out_reg[k] <= { mul_out_w[k][36] , mul_out_w[k][34 :16]};
+                end
+        end //else
+    end //always
+    
+    
+////////////////////////////////////////////////////////////////////////
+// assign [3920-1 :0] mul_out = [20-1:0] mul_out_reg [196-1 :0]
+
+    genvar m;
+    generate
+        for (m = 0; m < PIXEL; m = m + 1) begin : OUTPUT_PACK
+            assign mul_out[IO_WIDTH*(m+1)-1 : IO_WIDTH*m] = mul_out_reg[m];
+        end
+    endgenerate
+    
+    
+    
+    
+    
+//////////////////////////////////////////////////////////////////////
+// MULTIPLIER instantiation
+
+    genvar i;
+    generate 
+      for(i = 0; i < PIXEL; i = i + 1) begin
+        mult_gen_0 multiplier_0 (
+          .CLK(clk),
+          .A($signed(mul_in[ IO_WIDTH*(PIXEL - i)-1 : IO_WIDTH*(PIXEL - i - 1) ])),
+          .B(mul_weight),
+          .P(mul_out_w[i])
+        );
+      end
+    endgenerate
+
+
+endmodule
