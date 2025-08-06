@@ -4,8 +4,8 @@ module glbl_ctrl #(
     parameter COLUMN = 14,
     parameter PIXEL = ROW * COLUMN,              // 14 * 14 = 196
     parameter W_WIDTH = 17,
-    parameter ADDR_CHANNEL  = $clog2(384),         // CHANNEL = 384
-    parameter ADDR_WMEM = $clog2(384 * 64)       // 15 (for 24576)
+    parameter ADDR_CHANNEL  = $clog2(384),         // 8 (for CHANNEL = 384)
+    parameter ADDR_WMEM = $clog2(384 * 64)       // 15 (for 64*384 = 24576)
 )(
     input                               clk,
     input                               rst_n,
@@ -14,8 +14,9 @@ module glbl_ctrl #(
     input           [ADDR_CHANNEL-1:0]  channel_num,
     input                               bram_select,
     input  signed [IO_WIDTH*PIXEL-1:0]  acc_out,
+    input         [ADDR_CHANNEL -1 :0]  acc_cnt,
     
-    // bram_0
+// bram_0
     output                              ena_0,
     output                              wea_0,
     output          [ADDR_CHANNEL-1:0]  addra_0,
@@ -23,7 +24,7 @@ module glbl_ctrl #(
     output                              enb_0,
     output          [ADDR_CHANNEL-1:0]  addrb_0,
 
-    // bram_1
+// bram_1
     output                              ena_1,
     output                              wea_1,
     output           [ADDR_CHANNEL-1:0] addra_1,
@@ -31,9 +32,22 @@ module glbl_ctrl #(
     output                              enb_1,
     output           [ADDR_CHANNEL-1:0] addrb_1,
 
-    // bram_w
+// bram_w
     output                              ena_w0,
-    output              [ADDR_WMEM-1:0] addra_w0
+    output              [ADDR_WMEM-1:0] addra_w0,
+    
+// BRAM bias
+    output                              ena_bias_0,    
+    output         [ADDR_CHANNEL-1 : 0] addra_bias_0,
+// BRAM mean
+    output                              ena_mean_0,    
+    output         [ADDR_CHANNEL-1 : 0] addra_mean_0,  
+// BRAM std
+    output                              ena_std_0,     
+    output         [ADDR_CHANNEL-1 : 0] addra_std_0,   
+// BRAM weight    
+    output                              ena_weight_0,  
+    output         [ADDR_CHANNEL-1 : 0] addra_weight_0
 );
 
 //////////////////////////////////////////////////////////////
@@ -54,18 +68,18 @@ module glbl_ctrl #(
     // input bram
     wire in_ena;
     wire in_wea;
-    wire [8:0] in_addra;
+    wire [ADDR_CHANNEL-1 : 0] in_addra;
     wire in_enb;
-    wire [8:0] in_addrb;
+    wire [ADDR_CHANNEL-1 : 0] in_addrb;
     // output bram
     wire out_ena;
     wire out_wea;
-    wire [8:0] out_addra;
+    wire [ADDR_CHANNEL-1 : 0] out_addra;
     wire out_enb;
-    wire [8:0] out_addrb;
+    wire [ADDR_CHANNEL-1 : 0] out_addrb;
     //weight bram
     wire weight_ena;
-    wire [14:0] weight_addra;
+    wire [ADDR_WMEM-1 : 0] weight_addra;
     
 //////////////////////////////////////////////////////////////
 
@@ -116,6 +130,7 @@ module glbl_ctrl #(
         .rst_n(rst_n),
         .state(state),
         .cnt(cnt),
+        .acc_cnt(acc_cnt),
         .save_valid(save_valid),
         .channel_num(channel_num),
         .in_ena(in_ena),
@@ -134,6 +149,7 @@ module glbl_ctrl #(
         .rst_n(rst_n),
         .state(state),
         .cnt(cnt),
+        .acc_cnt(acc_cnt),
         .in_ena(in_ena),
         .in_wea(in_wea),
         .in_enb(in_enb),

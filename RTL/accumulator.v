@@ -1,18 +1,21 @@
 `timescale 1ns / 1ps
 
-module accumulator#(
+module accumulator #(
     parameter IO_WIDTH = 18,
     parameter ROW = 14,
     parameter COLUMN = 14,
-    parameter PIXEL = ROW * COLUMN, // // 14 * 14 = 196 PIXEL
-    parameter W_WIDTH = 17
+    parameter PIXEL = ROW * COLUMN,              // 14 * 14 = 196
+    parameter W_WIDTH = 17,
+    parameter ADDR_CHANNEL  = $clog2(384),         // 8 (for CHANNEL = 384)
+    parameter ADDR_WMEM = $clog2(384 * 64)       // 15 (for 64*384 = 24576)
 )(
     input                                      clk,
     input                                      rst_n,
     input                              [2:0]   state,
-    input  signed [IO_WIDTH * PIXEL - 1 : 0]   mul_out,  // [3920-1 : 0], 3920 bit
-    output reg                                 save_valid,
-    output reg                         [8:0]   channel_num,
+    input  signed  [IO_WIDTH * PIXEL - 1 :0]   mul_out,  // [3920-1 : 0], 3920 bit
+    output reg         [ADDR_CHANNEL -1 :0]    acc_cnt,
+    output reg                                 bn_relu_valid,
+    output reg          [ADDR_CHANNEL-1 :0]   channel_num,
     output reg                                 pw_1_done,
     output signed [IO_WIDTH * PIXEL - 1 : 0]   acc_out    // [3920-1 : 0], 3920 bit
 );
@@ -31,7 +34,6 @@ module accumulator#(
 ////////////////////////////////////////////////////////////
 
     reg signed [IO_WIDTH-1:0] acc_out_reg [0:PIXEL-1];  // [20-1: 0]] acc_out_reg [196-1 :0]*/
-    reg [8:0] cnt; // Cover 0 ~ 383
     reg [7:0] state_delay;
     
     wire conv_en;
@@ -86,7 +88,7 @@ module accumulator#(
     genvar i;
     generate
         for (i = 0; i < PIXEL; i = i + 1) begin : PACK_OUTPUT
-            assign acc_out[IO_WIDTH*(i+1)-1 : IO_WIDTH*i] = (save_valid) ? acc_out_reg[i] : 0;
+            assign acc_out[IO_WIDTH*(i+1)-1 : IO_WIDTH*i] = (bn_relu_valid) ? acc_out_reg[i] : 0;
         end
     endgenerate
     
@@ -94,7 +96,7 @@ module accumulator#(
 
 
 ///////////////////////////////////////////////////////////////////////
-// pointwise's output, depthwise's output, save_valid signal
+// pointwise's output, depthwise's output, bn_relu_valid signal
 
     integer k;
     always @(posedge clk or negedge rst_n) begin
@@ -102,8 +104,8 @@ module accumulator#(
             for (k = 0; k < PIXEL; k = k + 1) begin
                 acc_out_reg[k] <= 0;
             end
-            cnt <= 0;
-            save_valid <= 0;
+            acc_cnt <= 0;
+            bn_relu_valid <= 0;
             channel_num <= 0;
             pw_1_done <= 0;
         end else begin
@@ -112,30 +114,30 @@ module accumulator#(
                     for (k = 0; k < PIXEL; k = k + 1) begin
                         acc_out_reg[k] <= 0;
                     end
-                    cnt <= 0;
-                    save_valid <= 0;
+                    acc_cnt <= 0;
+                    bn_relu_valid <= 0;
                     channel_num <= 0;
                 end
     
                 PW_1: begin
                 
                     for (k = 0; k < PIXEL; k = k + 1) begin
-                        if (cnt >= 63)  begin acc_out_reg[k] <= mul_out_array[k];                  end // when start a new channel
+                        if (acc_cnt >= 63)  begin acc_out_reg[k] <= mul_out_array[k];                  end // when start a new channel
                         else            begin acc_out_reg[k] <= acc_out_reg[k] + mul_out_array[k]; end //accumulate 
                     end
                     
                     if (conv_en) begin
-                        cnt <= (cnt == 63) ? 0 : cnt + 1;
-                        save_valid <= (cnt == 62);
-                        pw_1_done <= (cnt==62) && (channel_num == 383);
+                        acc_cnt <= (acc_cnt == 63) ? 0 : acc_cnt + 1;
+                        bn_relu_valid <= (acc_cnt == 62);
+                        pw_1_done <= (acc_cnt==62) && (channel_num == 383);
                         
-                        if (save_valid) begin channel_num <= (channel_num == 383) ? 0 : channel_num + 1; end
+                        if (bn_relu_valid) begin channel_num <= (channel_num == 383) ? 0 : channel_num + 1; end
                         
                     end
                     else begin
-                        // conv_en ¨¬??¡Æ¨ù¨¬ ¨ö? ??¡¾??¡©
-                        cnt <= 0;
-                        save_valid <= 0;
+                        // conv_en ¡§???¢®¨¡¡§?¡§? ¡§?? ??¢®¨ú??¢®?
+                        acc_cnt <= 0;
+                        bn_relu_valid <= 0;
                         channel_num <= 0;
                         pw_1_done <= 0;
                     end
@@ -175,7 +177,7 @@ module accumulator#(
                         acc_out_reg[k] <= 0;
                     end
                     cnt <= 0;
-                    save_valid <= 0;
+                    bn_relu_valid <= 0;
                     channel_num <= 0;
                     pw_1_done <= 0;
                 end
