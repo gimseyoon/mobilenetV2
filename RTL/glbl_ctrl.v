@@ -4,38 +4,47 @@ module glbl_ctrl #(
     parameter COLUMN = 14,
     parameter PIXEL = ROW * COLUMN,              // 14 * 14 = 196
     parameter W_WIDTH = 17,
-    parameter ADDR_CHANNEL  = $clog2(384),         // 8 (for CHANNEL = 384)
-    parameter ADDR_WMEM = $clog2(384 * 64)       // 15 (for 64*384 = 24576)
+    parameter ADDR_CHANNEL  = $clog2(384),        // 9 (for CHANNEL = 384)
+    parameter ADDR_WMEM = $clog2(384 * 64),       // 15 (for 64*384 = 24576)
+    parameter ADDR_W1_MEM = $clog2(384 * 9)       // 12 (for 9*384 = 3456)
 )(
     input                               clk,
     input                               rst_n,
     input                        [2:0]  state,
+    input                               pw_1_valid,
+    input                               dw_valid,
     input                               save_valid,
     input           [ADDR_CHANNEL-1:0]  channel_num,
-    input                               bram_select,
     input  signed [IO_WIDTH*PIXEL-1:0]  acc_out,
     input         [ADDR_CHANNEL -1 :0]  acc_cnt,
     
-// bram_0
+////////////////////////////////////////////////////////////////////////////
+// bram_A
     output                              ena_0,
     output                              wea_0,
     output          [ADDR_CHANNEL-1:0]  addra_0,
-    output signed [IO_WIDTH*PIXEL-1:0]  dina_0,
+    output reg signed [IO_WIDTH*PIXEL-1:0]  dina_0,
     output                              enb_0,
     output          [ADDR_CHANNEL-1:0]  addrb_0,
 
-// bram_1
+// bram_B
     output                              ena_1,
     output                              wea_1,
     output           [ADDR_CHANNEL-1:0] addra_1,
-    output signed [IO_WIDTH*PIXEL-1:0]  dina_1,
+    output reg signed [IO_WIDTH*PIXEL-1:0]  dina_1,
     output                              enb_1,
     output           [ADDR_CHANNEL-1:0] addrb_1,
 
-// bram_w
+// bram_W0
     output                              ena_w0,
     output              [ADDR_WMEM-1:0] addra_w0,
-    
+// bram_W1
+    output                              ena_w1,
+    output              [ADDR_W1_MEM-1:0] addra_w1,
+// bram_W2
+    output                              ena_w2,
+    output              [ADDR_WMEM-1:0] addra_w2,
+////////////////////////////////////////////////////////////////////////////
 // BRAM bias
     output                              ena_bias_0,    
     output         [ADDR_CHANNEL-1 : 0] addra_bias_0,
@@ -63,97 +72,145 @@ module glbl_ctrl #(
 
 //////////////////////////////////////////////////////////////
 
-    reg [14:0] cnt;
+    reg [14:0] glbl_cnt; // (0 ~ 32,767)
 
-    // input bram
-    wire in_ena;
-    wire in_wea;
-    wire [ADDR_CHANNEL-1 : 0] in_addra;
-    wire in_enb;
-    wire [ADDR_CHANNEL-1 : 0] in_addrb;
-    // output bram
-    wire out_ena;
-    wire out_wea;
-    wire [ADDR_CHANNEL-1 : 0] out_addra;
-    wire out_enb;
-    wire [ADDR_CHANNEL-1 : 0] out_addrb;
-    //weight bram
-    wire weight_ena;
-    wire [ADDR_WMEM-1 : 0] weight_addra;
-    
+
 //////////////////////////////////////////////////////////////
+// dina_0 / dina_1
 
-// [bram_0] : bram_select == 1 -> INPUT, bram_select == 0 -> OUTPUT 
-    assign ena_0     = (bram_select == 1) ? 0          : save_valid;
-    assign wea_0     = (bram_select == 1) ? 0          : save_valid;
-    assign addra_0   = (bram_select == 1) ? 0          : channel_num;
-    assign dina_0    = (bram_select == 1) ? 0          : acc_out;
-    assign enb_0     = (bram_select == 1) ? in_enb     : 0;
-    assign addrb_0   = (bram_select == 1) ? in_addrb   : 0;
-    
-// [bram_1] : bram_select == 0 -> INPUT, bram_select == 1 -> OUTPUT 
-    assign ena_1     = (bram_select == 0) ? 0          : save_valid;
-    assign wea_1     = (bram_select == 0) ? 0          : save_valid;
-    assign addra_1   = (bram_select == 0) ? 0          : channel_num;
-    assign dina_1    = (bram_select == 0) ? 0          : acc_out;
-    assign enb_1     = (bram_select == 0) ? in_enb     : 0;
-    assign addrb_1   = (bram_select == 0) ? in_addrb   : 0;
+    always @(*) begin
+        if(!rst_n) begin
+            dina_0 = 0; 
+            dina_1 = 0;
+        end
+        else begin
+            case (state)
+                IDLE: begin
+                    dina_0 = 0;
+                    dina_1 = 0;
+                end //IDLE
+                
+                PW_1: begin
+                    if(pw_1_valid) begin
+                        dina_1 = acc_out;
+                        dina_0 = 0;
+                    end  
+                    else begin
+                        dina_1 = 0;
+                        dina_0 = 0;
+                    end
+                end //PW_1
+                
+                PW_1_BN_RELU: begin
+                
+                end
+                
+                DW: begin
+                    if(dw_valid) begin
+                        dina_1 = acc_out;
+                        dina_0 = 0;
+                    end  
+                    else begin
+                        dina_1 = 0;
+                        dina_0 = 0;
+                    end
+                end //DW   
 
-// bram_w0
-    assign ena_w0    = weight_ena;
-    assign addra_w0  = weight_addra;
+                // Other states: modify in future
+                default: begin
+
+                end
+            endcase
+        end
+    end
+
+
 
 
 //////////////////////////////////////////////////////////////
 // cnt : 0 -> 24579 -> 0 -> 24579 -> ...
 
-    always @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            cnt <= 0;
-        end else begin
-            if (state == PW_1) begin
-                if (cnt >= 15'd24576 + 15'd3)
-                    cnt <= 0;
+always @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+        glbl_cnt <= 0;
+    end else begin
+        case (state)
+            PW_1: begin
+                if (glbl_cnt >= 15'd24576 + 15'd7)
+                    glbl_cnt <= 0;
                 else
-                    cnt <= cnt + 1;
-            end else begin
-                cnt <= 0;
+                    glbl_cnt <= glbl_cnt + 1;
             end
-        end
+            
+            PW_1_BN_RELU: begin
+                
+            end
+            
+            DW: begin
+                if (glbl_cnt >= 15'd3256 + 15'd3)
+                    glbl_cnt <= 0;
+                else
+                    glbl_cnt <= glbl_cnt + 1;
+            end
+            default: begin
+                glbl_cnt <= 0;
+            end
+        endcase
     end
+end
 
 //////////////////////////////////////////////////////////////
 // instantiation addr_counter
 
     addr_counter addr_counter_0 (
-        .clk(clk),
-        .rst_n(rst_n),
-        .state(state),
-        .cnt(cnt),
-        .acc_cnt(acc_cnt),
-        .save_valid(save_valid),
-        .channel_num(channel_num),
-        .in_ena(in_ena),
-        .in_enb(in_enb),
-        .weight_ena(weight_ena),
-        .in_addra(in_addra),
-        .in_addrb(in_addrb),
-        .weight_addra(weight_addra)
+        .clk                (clk),
+        .rst_n              (rst_n),
+        .state              (state),
+        .glbl_cnt           (glbl_cnt),
+        .acc_cnt            (acc_cnt),
+        .save_valid         (save_valid),
+        .pw_1_valid         (pw_1_valid),
+        .channel_num        (channel_num),
+        .enb_0              (enb_0),
+        .enb_1              (enb_1),
+        
+        .addra_0           (addra_0),
+        .addrb_0           (addrb_0),
+        .addra_1           (addra_1),
+        .addrb_1           (addrb_1),
+        .addra_w0          (addra_w0),
+        .addra_w1          (addra_w1),
+        .addra_w2          (addra_w2),
+        .addra_bias_0      (addra_bias_0),
+        .addra_mean_0      (addra_mean_0),
+        .addra_std_0       (addra_std_0),
+        .addra_weight_0    (addra_weight_0)
     );
 
 //////////////////////////////////////////////////////////////
 // instantiation enable_counter
     
     enable_counter enable_counter_0 (
-        .clk(clk),
-        .rst_n(rst_n),
-        .state(state),
-        .cnt(cnt),
-        .acc_cnt(acc_cnt),
-        .in_ena(in_ena),
-        .in_wea(in_wea),
-        .in_enb(in_enb),
-        .weight_ena(weight_ena)
+        .clk              (clk),
+        .rst_n            (rst_n),
+        .state            (state),
+        .glbl_cnt         (glbl_cnt),
+        .acc_cnt          (acc_cnt),
+        .pw_1_valid       (pw_1_valid),
+        
+        .ena_0           (ena_0),
+        .wea_0           (wea_0),
+        .enb_0           (enb_0),
+        .ena_1           (ena_1),
+        .wea_1           (wea_1),
+        .enb_1           (enb_1),
+        .ena_w0          (ena_w0),
+        .ena_w1          (ena_w1),
+        .ena_w2          (ena_w2),
+        .ena_bias_0      (ena_bias_0),
+        .ena_mean_0      (ena_mean_0),
+        .ena_std_0       (ena_std_0),
+        .ena_weight_0    (ena_weight_0)
     );
 
 endmodule

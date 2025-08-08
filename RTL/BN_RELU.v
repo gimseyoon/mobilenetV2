@@ -4,122 +4,168 @@ module BN_RELU #(
     parameter COLUMN = 14,
     parameter PIXEL = ROW * COLUMN,                 // 14 * 14 = 196
     parameter W_WIDTH = 17,
-    parameter ADDR_CHANNEL  = $clog2(384),          // 8 (for CHANNEL = 384)
+    parameter ADDR_CHANNEL  = $clog2(384),          // 9 (for CHANNEL = 384)
     parameter ADDR_WMEM = $clog2(384 * 64)          // 15 (for 64*384 = 24576)
 )(
     input                                       clk,
     input                                       rst_n,
-    input                                       bn_relu_valid,
-    input                                       mean,
-    input                                       weight,
-    input                                       bias,
-    input                                       std,
-    input signed [IO_WIDTH * PIXEL - 1 : 0]     acc_out,        // [3920-1 : 0], 3920 bit
+    input                                       pw_1_valid,
+    input                                       bn_en,
+    input                             [31:0]    mean,
+    input                             [31:0]    weight,
+    input                             [31:0]    bias,
+    input                             [31:0]    std,
+    input  signed [IO_WIDTH * PIXEL - 1 : 0]    acc_out,        // [3920-1 : 0], 3920 bit
     output signed [IO_WIDTH * PIXEL - 1 : 0]    bn_relu_out,    // [3920-1 : 0], 3920 bit
-    output                                      save_valid
+    output                                      save_valid,
+    output reg                                 pw_1_bn_relu_done
     );
     
 //////////////////////////////////////////////////
+    reg                    [5:0] bn_cnt;            // 0~48
+    reg      [ADDR_CHANNEL-1 :0] bn_channel_num;
+    reg  signed [IO_WIDTH-1 : 0] acc_out_reg       [0 : PIXEL-1];
+    wire        [IO_WIDTH-1 : 0] acc_selected      [3:0];
+    wire         [IO_WIDTH-1 :0] bn_single_out     [3:0];
+    reg          [IO_WIDTH-1 :0] bn_relu_out_array [PIXEL-1 :0];
 
-    // Fixed to Float
-    wire signed [IO_WIDTH-1 : 0] data_f2f_in  = acc_out;
-    wire signed [31:0] data_f2f_out;
-    wire               valid_f2f_out;
-    // Subtract
-    wire signed [31:0] data_sub_out;
-    wire               valid_sub_out;
-    // Divide
-    wire signed [31:0] data_div_out;
-    wire               valid_div_out;
-    // Multiply
-    wire signed [31:0] data_mul_out;
-    wire               valid_mul_out;
-    // Add
-    wire signed [31:0] data_add_out;
-    wire               valid_add_out;
-    // Float to Fixed
-    wire signed [IO_WIDTH-1 : 0] data_f2fx_out;
-    wire               valid_f2fx_out;
+
+
+
+    
+///////////////////////////////////////////////////////////////////////
+// assign acc_out_array[i] = acc_out[20(i+1) -1 :20*i]
+
+always @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+        bn_cnt <= 0;
+    end
+    else begin
+        if (bn_cnt == 48) begin 
+            bn_cnt <= 0;
+        end
+        else if(bn_en) begin
+            bn_cnt <= bn_cnt + 1;
+        end
+    end
+end
+
+
+///////////////////////////////////////////////////////////////////////
+// assign acc_out_array[i] = acc_out[20(i+1) -1 :20*i]
+
+genvar i;
+generate
+    for (i = 0; i < PIXEL; i = i + 1) begin : REG_ARRAY_ASSIGN
+        always @(posedge clk or negedge rst_n) begin
+            if (!rst_n)
+                acc_out_reg[i] <= 0;
+            else
+                if(pw_1_valid) begin
+                    acc_out_reg[i] <= acc_out[IO_WIDTH*(i+1)-1 : IO_WIDTH*i];
+                end
+        end
+    end
+endgenerate
     
     
-//////////////////////////////////////////////////
+    
+///////////////////////////////////////////////////////////////////////
+// aacc_selected <= acc_out_reg
+genvar s;
+generate
+    for (s = 0; s < 4; s = s + 1) begin : SELECT_ACC
+        assign acc_selected[s] = acc_out_reg[bn_cnt*4 + s];
+    end
+endgenerate
 
-    assign bn_relu_out = (valid_f2fx_out) ? data_f2fx_out[15:0] : 0;
-    assign save_valid = valid_f2fx_out;
+
+
+///////////////////////////////////////////////////////////////////////
+// assign bn_relu_out[3920-1 :0] = bn_relu_out_array [20-1 :0][196-1 :0]
+
+    genvar k;
+    generate
+        for (k = 0; k < PIXEL; k = k + 1) begin : PACK_OUTPUT
+            assign bn_relu_out [(IO_WIDTH*k+1)-1 : IO_WIDTH*k] = (save_valid) ? bn_relu_out_array[k] : 0;
+        end
+    endgenerate
     
     
     
-//////////////////////////////////////////////////
-// IP Connections
+///////////////////////////////////////////////////////////////////////
+// channel_num
+
+    always@(posedge clk or negedge rst_n) begin
+        if(!rst_n) begin
+            bn_channel_num <= 0;
+        end
+        else begin
+            if (save_valid) begin bn_channel_num <= (bn_channel_num == 383) ? 0 : bn_channel_num + 1; end
+        end
+    end
 
 
-// Fixed to Float
-fixed_to_float fixed_to_float_0 (
-  .aclk(clk),
-  .aresetn(rst_n),
-  .s_axis_a_tvalid(valid_f2f_in),
-  .s_axis_a_tdata(data_f2f_in),
-  .m_axis_result_tvalid(valid_f2f_out),
-  .m_axis_result_tdata(data_f2f_out)
-);
+///////////////////////////////////////////////////////////////////////
+// bn_relu_out_array
 
-// Subtract: x - mean
-subtract subtract_0 (
-  .aclk(clk),
-  .aresetn(rst_n),
-  .s_axis_a_tvalid(valid_f2f_out),
-  .s_axis_a_tdata(data_f2f_out),
-  .s_axis_b_tvalid(valid_f2f_out),
-  .s_axis_b_tdata(mean),
-  .m_axis_result_tvalid(valid_sub_out),
-  .m_axis_result_tdata(data_sub_out)
-);
+    integer q;
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            for (q = 0; q < PIXEL; q = q + 1)
+                bn_relu_out_array[q] <= 0;
+        end 
+        else begin
+            if (save_valid) begin
+                bn_relu_out_array[bn_cnt * 4 + 0] <= bn_single_out[0];
+                bn_relu_out_array[bn_cnt * 4 + 1] <= bn_single_out[1];
+                bn_relu_out_array[bn_cnt * 4 + 2] <= bn_single_out[2];
+                bn_relu_out_array[bn_cnt * 4 + 3] <= bn_single_out[3];
+            end 
+        end 
+    end
 
-// Divide: (x - mean) / std
-divide divide_0 (
-  .aclk(clk),
-  .aresetn(rst_n),
-  .s_axis_a_tvalid(valid_sub_out),
-  .s_axis_a_tdata(data_sub_out),
-  .s_axis_b_tvalid(valid_sub_out),
-  .s_axis_b_tdata(std),
-  .m_axis_result_tvalid(valid_div_out),
-  .m_axis_result_tdata(data_div_out)
-);
+///////////////////////////////////////////////////////////////////////
+// pw_1_bn_relu_done
 
-// Multiply: * weight
-Multiply Multiply_0 (
-  .aclk(clk),
-  .aresetn(rst_n),
-  .s_axis_a_tvalid(valid_div_out),
-  .s_axis_a_tdata(data_div_out),
-  .s_axis_b_tvalid(valid_div_out),
-  .s_axis_b_tdata(weight),
-  .m_axis_result_tvalid(valid_mul_out),
-  .m_axis_result_tdata(data_mul_out)
-);
-
-// Add: + bias
-add add_0 (
-  .aclk(clk),
-  .aresetn(rst_n),
-  .s_axis_a_tvalid(valid_mul_out),
-  .s_axis_a_tdata(data_mul_out),
-  .s_axis_b_tvalid(valid_mul_out),
-  .s_axis_b_tdata(bias),
-  .m_axis_result_tvalid(valid_add_out),
-  .m_axis_result_tdata(data_add_out)
-);
-
-// Float to Fixed
-float_to_fixed float_to_fixed_0 (
-  .aclk(clk),
-  .aresetn(rst_n),
-  .s_axis_a_tvalid(valid_add_out),
-  .s_axis_a_tdata(data_add_out),
-  .m_axis_result_tvalid(valid_f2fx_out),
-  .m_axis_result_tdata(data_f2fx_out)
-);
-
-
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            for (q = 0; q < PIXEL; q = q + 1)
+                pw_1_bn_relu_done <= 0;
+        end 
+        else begin
+            if ( (bn_cnt == 6'd48) && (bn_channel_num == 9'd383) ) begin   
+                pw_1_bn_relu_done <= 1;
+            end
+            else begin
+                pw_1_bn_relu_done <= 0;
+            end
+        end //else
+    end //always
+    
+    
+///////////////////////////////////////////////////////////////////////
+    genvar p;
+    generate
+        for (p = 0; p < 4; p = p + 1) begin : BN_UNIT
+            BN_RELU_SINGLE #(
+                .IO_WIDTH(IO_WIDTH)
+            ) BN_RELU_SINGLE_0 (
+                .clk(clk),
+                .rst_n(rst_n),
+                .pw_1_valid(pw_1_valid),
+                .bn_en(bn_en),
+                .mean(mean),
+                .weight(weight),
+                .bias(bias),
+                .std(std),
+                .acc_in(acc_selected[i]),
+                .bn_out(bn_single_out[i]),
+                .valid_out(save_valid)
+            );
+        end
+    endgenerate
+    
+    
+///////////////////////////////////////////////////////////////////////
 endmodule

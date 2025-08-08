@@ -11,7 +11,6 @@ module FSM(
     input pw_2_done,
     input pw_2_bn_done,
     input layer_done,       //PW_2 done
-    output reg bram_select,
     output reg [2:0] state
     );
     
@@ -49,7 +48,7 @@ module FSM(
         ns = state;
         case(state)
             IDLE:           if(start)               ns = PW_1;        
-            PW_1:           if(pw_1_done)           ns = PW_1_BN_RELU;
+            PW_1:           if(pw_1_bn_relu_done)           ns = DW;
             PW_1_BN_RELU:   if(pw_1_bn_relu_done)   ns = DW;          
             DW:             if(dw_done)             ns = DW_BN_RELU;  
             DW_BN_RELU:     if(dw_bn_relu_done)     ns = PW_2;        
@@ -61,16 +60,6 @@ module FSM(
     end //always
     
 
-    always@(posedge clk or negedge rst_n) begin
-        if(!rst_n) begin
-            bram_select <= 0;
-        end
-        else begin
-            if(start || pw_1_bn_relu_done || dw_bn_relu_done|| layer_done) begin
-                bram_select <= ~bram_select;
-            end
-        end //else
-    end //always
 
 
 

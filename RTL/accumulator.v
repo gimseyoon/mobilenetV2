@@ -6,18 +6,24 @@ module accumulator #(
     parameter COLUMN = 14,
     parameter PIXEL = ROW * COLUMN,              // 14 * 14 = 196
     parameter W_WIDTH = 17,
-    parameter ADDR_CHANNEL  = $clog2(384),         // 8 (for CHANNEL = 384)
-    parameter ADDR_WMEM = $clog2(384 * 64)       // 15 (for 64*384 = 24576)
+    parameter ADDR_CHANNEL  = $clog2(384),        // 9 (for CHANNEL = 384)
+    parameter ADDR_WMEM = $clog2(384 * 64),       // 15 (for 64*384 = 24576)
+    parameter ADDR_W1_MEM = $clog2(384 * 9)       // 12 (for 9*384 = 3456)
 )(
     input                                      clk,
     input                                      rst_n,
     input                              [2:0]   state,
     input  signed  [IO_WIDTH * PIXEL - 1 :0]   mul_out,  // [3920-1 : 0], 3920 bit
+    output reg                                 bn_en,
     output reg         [ADDR_CHANNEL -1 :0]    acc_cnt,
-    output reg                                 bn_relu_valid,
-    output reg          [ADDR_CHANNEL-1 :0]   channel_num,
+    output reg                                 pw_1_valid,
     output reg                                 pw_1_done,
-    output signed [IO_WIDTH * PIXEL - 1 : 0]   acc_out    // [3920-1 : 0], 3920 bit
+    output reg                                 dw_valid,
+    output reg                                 dw_done,
+    output reg                                 pw_2_valid,
+    output reg                                 pw_2_done,
+    output reg          [ADDR_CHANNEL-1 :0]    channel_num,
+    output signed [IO_WIDTH * PIXEL - 1 : 0]    acc_out    // [3920-1 : 0], 3920 bit
 );
 
 ////////////////////////////////////////////////////////////
@@ -35,15 +41,17 @@ module accumulator #(
 
     reg signed [IO_WIDTH-1:0] acc_out_reg [0:PIXEL-1];  // [20-1: 0]] acc_out_reg [196-1 :0]*/
     reg [7:0] state_delay;
+    reg signed [IO_WIDTH-1:0] temp [0:PIXEL-1];
     
-    wire conv_en;
-    wire signed [IO_WIDTH-1:0] mul_out_array [0:PIXEL-1]; // Convert [3920-1 :0] mul_out -> [20-1 :0] mul_out_array [196-1 :0]
+    wire pw_1_en;
+    wire dw_en;
+    wire signed [IO_WIDTH-1:0] mul_out_reg [0:PIXEL-1]; // Convert [3920-1 :0] mul_out -> [20-1 :0] mul_out_reg [196-1 :0]
 
 ///////////////////////////////////////////////////////////////////////
-// assign conv_en = state_delay[7]
+// assign pw_1_en = state_delay[7]
 
-    assign conv_en = state_delay[7];
-
+    assign pw_1_en = (state==PW_1) ? state_delay[7] : 0;
+    assign dw_en = (state==DW) ? state_delay[5] : 0;
 
 
 ///////////////////////////////////////////////////////////////////////
@@ -61,7 +69,10 @@ module accumulator #(
             state_delay[3] <= state_delay[2];
             state_delay[2] <= state_delay[1];
             state_delay[1] <= state_delay[0];
-            if(state == PW_1) begin
+            if(pw_1_done || dw_done || pw_2_done) begin
+                state_delay <= 0;
+            end
+            else if( (state == PW_1) || (state == DW) || (state == PW_2)) begin
                 state_delay[0] <= 1;
             end
             else begin
@@ -71,12 +82,12 @@ module accumulator #(
     end //always
 
 ///////////////////////////////////////////////////////////////////////
-// assign mul_out_array[i] = mul_out[20(i+1) -1 :20*i]
+// assign mul_out_reg[i] = mul_out[20(i+1) -1 :20*i]
 
     genvar j;
     generate
       for (j = 0; j < PIXEL; j = j + 1) begin : UNPACK_MUL_OUT
-        assign mul_out_array[j] = mul_out[IO_WIDTH*(j+1)-1 : IO_WIDTH*j];   // Convert [3920-1 :0] mul_out -> [20-1 :0] mul_out_array [196-1 :0]
+        assign mul_out_reg[j] = mul_out[IO_WIDTH*(j+1)-1 : IO_WIDTH*j];   // Convert [3920-1 :0] mul_out -> [20-1 :0] mul_out_reg [196-1 :0]
       end
     endgenerate
     
@@ -88,7 +99,7 @@ module accumulator #(
     genvar i;
     generate
         for (i = 0; i < PIXEL; i = i + 1) begin : PACK_OUTPUT
-            assign acc_out[IO_WIDTH*(i+1)-1 : IO_WIDTH*i] = (bn_relu_valid) ? acc_out_reg[i] : 0;
+            assign acc_out[IO_WIDTH*(i+1)-1 : IO_WIDTH*i] = (pw_1_valid || dw_valid || pw_2_valid) ? acc_out_reg[i] : 0;
         end
     endgenerate
     
@@ -98,49 +109,76 @@ module accumulator #(
 ///////////////////////////////////////////////////////////////////////
 // pointwise's output, depthwise's output, bn_relu_valid signal
 
-    integer k;
+    integer k, x, y, p;
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             for (k = 0; k < PIXEL; k = k + 1) begin
                 acc_out_reg[k] <= 0;
             end
             acc_cnt <= 0;
-            bn_relu_valid <= 0;
             channel_num <= 0;
+            bn_en <= 0;
+            pw_1_valid <= 0;
             pw_1_done <= 0;
-        end else begin
+            dw_valid <= 0;
+            dw_done <= 0;
+            pw_2_valid <= 0;
+            pw_2_done <= 0;
+        end 
+        else begin
             case (state)
                 IDLE: begin
                     for (k = 0; k < PIXEL; k = k + 1) begin
                         acc_out_reg[k] <= 0;
                     end
                     acc_cnt <= 0;
-                    bn_relu_valid <= 0;
                     channel_num <= 0;
+                    bn_en <= 0;
+                    pw_1_valid <= 0;
+                    pw_1_done <= 0;
+                    dw_valid <= 0;
+                    dw_done <= 0;
+                    pw_2_valid <= 0;
+                    pw_2_done <= 0;
                 end
     
                 PW_1: begin
                 
                     for (k = 0; k < PIXEL; k = k + 1) begin
-                        if (acc_cnt >= 63)  begin acc_out_reg[k] <= mul_out_array[k];                  end // when start a new channel
-                        else            begin acc_out_reg[k] <= acc_out_reg[k] + mul_out_array[k]; end //accumulate 
+                        if (acc_cnt >= 63)  begin acc_out_reg[k] <= mul_out_reg[k];                  end // when start a new channel
+                        else                begin acc_out_reg[k] <= acc_out_reg[k] + mul_out_reg[k]; end //accumulate 
                     end
                     
-                    if (conv_en) begin
+                    if (pw_1_en) begin
                         acc_cnt <= (acc_cnt == 63) ? 0 : acc_cnt + 1;
-                        bn_relu_valid <= (acc_cnt == 62);
+                        pw_1_valid <= (acc_cnt == 62);
                         pw_1_done <= (acc_cnt==62) && (channel_num == 383);
                         
-                        if (bn_relu_valid) begin channel_num <= (channel_num == 383) ? 0 : channel_num + 1; end
-                        
+                        if (pw_1_valid) begin channel_num <= (channel_num == 383) ? 0 : channel_num + 1; end
                     end
                     else begin
-                        // conv_en ¨???¡Æ¨?¨? ¨?? ??¡¾??¡?
                         acc_cnt <= 0;
-                        bn_relu_valid <= 0;
-                        channel_num <= 0;
+                        pw_1_valid <= 0;
                         pw_1_done <= 0;
+                        channel_num <= 0;
                     end
+                    
+                    if(pw_1_done) begin
+                        for (k = 0; k < PIXEL; k = k + 1) begin
+                            acc_out_reg[k] <= 0;
+                        end
+                    end
+                    
+                    if (pw_1_valid && channel_num == 383) begin
+                        bn_en <= 0;
+                    end
+                    else if (pw_1_valid) begin
+                        bn_en <= 1;
+                    end
+                    else if(acc_cnt == 48) begin
+                        bn_en <= 0;
+                    end
+                    
                 end // PW_1
 
                 
@@ -150,8 +188,137 @@ module accumulator #(
                     end
     
                 DW: begin
-
-                end
+                
+                        bn_en <= dw_valid && (channel_num != 64);   
+                        
+                        case (acc_cnt)
+                                // case 1: 오른쪽 아래 13x13
+                                0: begin
+                                    for (y = 0; y < 13; y = y + 1) begin
+                                        for (x = 0; x < 13; x = x + 1) begin
+                                            acc_out_reg[(y + 1) * 14 + (x + 1)] <= mul_out_reg[y * 14 + x];
+                                        end
+                                    end
+                                end
+                    
+                                // case 2: 아래쪽 13x14
+                                1: begin
+                                    for (y = 0; y < 13; y = y + 1) begin
+                                        for (x = 0; x < 14; x = x + 1) begin
+                                            acc_out_reg[(y + 1) * 14 + x] <= acc_out_reg[(y + 1) * 14 + x] + mul_out_reg[y * 14 + x];
+                                        end
+                                    end
+                                end
+                    
+                                // case 3: 왼쪽 아래 13x13
+                                2: begin
+                                    for (y = 0; y < 13; y = y + 1) begin
+                                        for (x = 1; x < 14; x = x + 1) begin
+                                            acc_out_reg[(y + 1) * 14 + (x - 1)] <= acc_out_reg[(y + 1) * 14 + (x - 1)] + mul_out_reg[y * 14 + x];
+                                        end
+                                    end
+                                end
+                    
+                                // case 4: 오른쪽 14x13
+                                3: begin
+                                    for (y = 0; y < 14; y = y + 1) begin
+                                        for (x = 0; x < 13; x = x + 1) begin
+                                            acc_out_reg[y * 14 + (x + 1)] <= acc_out_reg[y * 14 + (x + 1)] + mul_out_reg[y * 14 + x];
+                                        end
+                                    end
+                                end
+                    
+                                // case 5: 전체 14x14 복사
+                                4: begin
+                                    for (p = 0; p < 196; p = p + 1) begin
+                                        acc_out_reg[p] <= acc_out_reg[p] + mul_out_reg[p];
+                                    end
+                                end
+                    
+                                // case 6: 왼쪽 14x13
+                                5: begin
+                                    for (y = 0; y < 14; y = y + 1) begin
+                                        for (x = 1; x < 14; x = x + 1) begin
+                                            acc_out_reg[y * 14 + (x - 1)] <= acc_out_reg[y * 14 + (x - 1)] + mul_out_reg[y * 14 + x];
+                                        end
+                                    end
+                                end
+                    
+                                // case 7: 오른쪽 위 13x13
+                                6: begin
+                                    for (y = 1; y < 14; y = y + 1) begin
+                                        for (x = 0; x < 13; x = x + 1) begin
+                                            acc_out_reg[(y - 1) * 14 + (x + 1)] <= acc_out_reg[(y - 1) * 14 + (x + 1)] + mul_out_reg[y * 14 + x];
+                                        end
+                                    end
+                                end
+                    
+                                // case 8: 위쪽 13x14
+                                7: begin
+                                    for (y = 1; y < 14; y = y + 1) begin
+                                        for (x = 0; x < 14; x = x + 1) begin
+                                            acc_out_reg[(y - 1) * 14 + x] <= acc_out_reg[(y - 1) * 14 + x] + mul_out_reg[y * 14 + x];
+                                        end
+                                    end
+                                end
+                    
+                                // case 9: 왼쪽 위 13x13
+                                8: begin
+                                    for (y = 1; y < 14; y = y + 1) begin
+                                        for (x = 1; x < 14; x = x + 1) begin
+                                            acc_out_reg[(y - 1) * 14 + (x - 1)] <= acc_out_reg[(y - 1) * 14 + (x - 1)] + mul_out_reg[y * 14 + x];
+                                        end
+                                    end
+                                end
+                                
+                                9: begin
+                                
+                                    // 1. 임시 버퍼 초기화
+                                    for (k = 0; k < PIXEL; k = k + 1) begin
+                                        temp[k] = 0;
+                                    end
+                                
+                                    // 2. 오른쪽 아래 13×13 채우기
+                                    for (y = 0; y < 13; y = y + 1) begin
+                                        for (x = 0; x < 13; x = x + 1) begin
+                                            temp[(y + 1) * 14 + (x + 1)] = mul_out_reg[y * 14 + x];
+                                        end
+                                    end
+                                
+                                    // 3. acc_out_reg에 반영
+                                    for (k = 0; k < PIXEL; k = k + 1) begin
+                                        acc_out_reg[k] <= temp[k];
+                                    end
+                                end
+                                                                
+                                
+                                // default (optional): 아무 작업도 하지 않음
+                                default: begin
+                                    // no operation
+                                end
+                            endcase
+                    
+                    if (dw_en) begin
+                        acc_cnt <= (acc_cnt == 9) ? 1 : acc_cnt + 1;
+                        dw_valid <= (acc_cnt == 8);
+                        dw_done <= (acc_cnt==8) && (channel_num == 383);
+                        
+                        if (dw_valid) begin channel_num <= (channel_num == 383) ? 0 : channel_num + 1; end
+                    end
+                    else begin
+                        acc_cnt <= 511;
+                        dw_valid <= 0;
+                        dw_done <= 0;
+                        channel_num <= 0;
+                    end
+                    
+                    if(dw_done) begin
+                        for (k = 0; k < PIXEL; k = k + 1) begin
+                            acc_out_reg[k] <= 0;
+                        end                    
+                    end
+                    
+                end //DW
                 
                 DW_BN_RELU:
                     begin
@@ -176,10 +343,14 @@ module accumulator #(
                     for (k = 0; k < PIXEL; k = k + 1) begin
                         acc_out_reg[k] <= 0;
                     end
-                    cnt <= 0;
-                    bn_relu_valid <= 0;
+                    acc_cnt <= 0;
                     channel_num <= 0;
+                    pw_1_valid <= 0;
                     pw_1_done <= 0;
+                    dw_valid <= 0;
+                    dw_done <= 0;
+                    pw_2_valid <= 0;
+                    pw_2_done <= 0;
                 end
             endcase
         end
