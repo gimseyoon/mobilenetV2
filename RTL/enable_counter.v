@@ -1,19 +1,45 @@
 `timescale 1ns / 1ps
 
-module enable_counter (
-    input clk,
-    input rst_n,
-    input [2:0] state,
-    input [14:0] cnt,
-// input bram eanble
-    output reg in_ena,
-    output reg in_wea,
-    output reg in_enb,
-// weight bram enable
-    output reg weight_ena
+module enable_counter #(
+    parameter IO_WIDTH = 18,
+    parameter ROW = 14,
+    parameter COLUMN = 14,
+    parameter PIXEL = ROW * COLUMN,              // 14 * 14 = 196
+    parameter W_WIDTH = 17,
+    parameter ADDR_CHANNEL  = $clog2(384),        // 9 (for CHANNEL = 384)
+    parameter ADDR_WMEM = $clog2(384 * 64),       // 15 (for 64*384 = 24576)
+    parameter ADDR_W1_MEM = $clog2(384 * 9)       // 12 (for 9*384 = 3456)
+)(
+    input                     clk,
+    input                     rst_n,
+    input       [2:0]         state,
+    input       [8:0]         glbl_cnt,
+    input  [ADDR_CHANNEL-1:0] acc_cnt,
+    input                     pw_1_valid,
+
+    // BRAM 0
+    output reg                ena_0,
+    output reg                wea_0,
+    output reg                enb_0,
+
+    // BRAM 1
+    output                    ena_1,
+    output                    wea_1,
+    output reg                enb_1,
+
+    // Weight BRAM
+    output reg                ena_w0,
+    output reg                ena_w1,
+    output reg                ena_w2,
+    
+    // BN Parameters BRAM
+    output reg                ena_bias_0,
+    output reg                ena_mean_0,
+    output reg                ena_std_0,
+    output reg                ena_weight_0
 );
 
-////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////
 
     localparam IDLE         = 3'b000,
                PW_1         = 3'b001,
@@ -25,43 +51,89 @@ module enable_counter (
                SK           = 3'b111;
 
 ///////////////////////////////////////////////////////////////////////
+
+    assign ena_1 = (pw_1_valid) ? 1 : 0;
+    assign wea_1 = (pw_1_valid) ? 1 : 0;
+
+
+///////////////////////////////////////////////////////////////////////
 // enable_counter
 
 always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            in_ena      <= 0;
-            in_wea      <= 0;
-            in_enb      <= 0;
-            weight_ena  <= 0;
+        ena_0         <= 0;
+        wea_0         <= 0;
+        enb_0         <= 0;
+        enb_1         <= 0;
+        ena_w0        <= 0; 
+        ena_w1        <= 0; 
+        ena_w2        <= 0; 
+        ena_bias_0    <= 0;
+        ena_mean_0    <= 0;
+        ena_std_0     <= 0;
+        ena_weight_0  <= 0;
         end 
         else begin
-            // 기본값 초기화
-            in_ena      <= 0;
-            in_wea      <= 0;
-            in_enb      <= 0;
-            weight_ena  <= 0;
 
             case (state)
                 PW_1: begin
-                    if (cnt >= 15'd24577) begin
-                        in_enb     <= 0;
-                        weight_ena <= 0;
+                
+                //bram_0, bram_W 
+                    if (glbl_cnt >= 15'd24577) begin
+                        enb_0  <= 0;
+                        ena_w0 <= 0;
                     end
                     else begin
-                        in_enb     <= 1;
-                        weight_ena <= 1;
+                        enb_0  <= 1;
+                        ena_w0 <= 1;
                     end
-                end // begin
+                    
+                //bram_param
+                    if(acc_cnt == 60) begin            
+                        ena_bias_0   <= 1;
+                        ena_mean_0   <= 1;  
+                        ena_std_0    <= 1;
+                        ena_weight_0 <= 1;                
+                    end
+                    else if(acc_cnt == 62) begin
+                        ena_bias_0   <= 0;
+                        ena_mean_0   <= 0;  
+                        ena_std_0    <= 0;
+                        ena_weight_0 <= 0;
+                    end
+                    
+                end // PW_1
 
                 PW_1_BN_RELU: begin
-                end
+
+                end // PW_1_BN_RELU
 
                 DW: begin
-                    in_enb     <= 1;
-                    weight_ena <= 1;
+                //bram_0
+                    if (glbl_cnt >= 15'd3457) begin
+                        enb_1  <= 0;
+                        ena_w1 <= 0;
+                    end
+                    else begin
+                        enb_1  <= 1;
+                        ena_w1 <= 1;
+                    end
+                end //DW
+                default: begin
+                    ena_0         <= 0;
+                    wea_0         <= 0;
+                    enb_0         <= 0;
+                    enb_1         <= 0;
+                    ena_w0        <= 0; 
+                    ena_w1        <= 0;                     
+                    ena_w2        <= 0;    
+                    ena_bias_0    <= 0;
+                    ena_mean_0    <= 0;
+                    ena_std_0     <= 0;
+                    ena_weight_0  <= 0;
+                    ena_weight_0  <= 0;                    
                 end
-
-                // 나머지 상태는 기본값 유지 (0)
+                // ?????? ???´? ???? ???? (0)
             endcase
         end //else
     end //always
