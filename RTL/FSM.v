@@ -48,7 +48,7 @@ module FSM(
         ns = state;
         case(state)
             IDLE:           if(start)               ns = PW_1;        
-            PW_1:           if(pw_1_bn_relu_done)           ns = DW;
+            PW_1:           if(pw_1_bn_relu_done)   ns = DW;
             PW_1_BN_RELU:   if(pw_1_bn_relu_done)   ns = DW;          
             DW:             if(dw_done)             ns = DW_BN_RELU;  
             DW_BN_RELU:     if(dw_bn_relu_done)     ns = PW_2;        

@@ -39,10 +39,10 @@ module accumulator #(
 
 ////////////////////////////////////////////////////////////
 
+    reg [3:0] bn_en_cnt;
     reg signed [IO_WIDTH-1:0] acc_out_reg [0:PIXEL-1];  // [20-1: 0]] acc_out_reg [196-1 :0]*/
     reg [7:0] state_delay;
     reg signed [IO_WIDTH-1:0] temp [0:PIXEL-1];
-    
     wire pw_1_en;
     wire dw_en;
     wire signed [IO_WIDTH-1:0] mul_out_reg [0:PIXEL-1]; // Convert [3920-1 :0] mul_out -> [20-1 :0] mul_out_reg [196-1 :0]
@@ -115,6 +115,7 @@ module accumulator #(
             for (k = 0; k < PIXEL; k = k + 1) begin
                 acc_out_reg[k] <= 0;
             end
+            bn_en_cnt <= 0;
             acc_cnt <= 0;
             channel_num <= 0;
             bn_en <= 0;
@@ -131,6 +132,7 @@ module accumulator #(
                     for (k = 0; k < PIXEL; k = k + 1) begin
                         acc_out_reg[k] <= 0;
                     end
+                    bn_en_cnt <= 0;
                     acc_cnt <= 0;
                     channel_num <= 0;
                     bn_en <= 0;
@@ -169,15 +171,22 @@ module accumulator #(
                         end
                     end
                     
-                    if (pw_1_valid && channel_num == 383) begin
-                        bn_en <= 0;
-                    end
-                    else if (pw_1_valid) begin
+                    if(pw_1_valid) begin
                         bn_en <= 1;
                     end
-                    else if(acc_cnt == 48) begin
-                        bn_en <= 0;
+                    else begin
+                        if(bn_en_cnt == 13) bn_en <= 0;
                     end
+                    
+                    if(bn_en) begin
+                        if(bn_en_cnt == 13) bn_en_cnt <= 0;
+                        else                bn_en_cnt <= bn_en_cnt + 1;
+                    end
+                    else begin
+                        bn_en_cnt <= 0;
+                    end
+                    
+                    
                     
                 end // PW_1
 
@@ -192,7 +201,7 @@ module accumulator #(
                         bn_en <= dw_valid && (channel_num != 64);   
                         
                         case (acc_cnt)
-                                // case 1: 오른쪽 아래 13x13
+                                // case 1: ?????? ??? 13x13
                                 0: begin
                                     for (y = 0; y < 13; y = y + 1) begin
                                         for (x = 0; x < 13; x = x + 1) begin
@@ -201,7 +210,7 @@ module accumulator #(
                                     end
                                 end
                     
-                                // case 2: 아래쪽 13x14
+                                // case 2: ????? 13x14
                                 1: begin
                                     for (y = 0; y < 13; y = y + 1) begin
                                         for (x = 0; x < 14; x = x + 1) begin
@@ -210,7 +219,7 @@ module accumulator #(
                                     end
                                 end
                     
-                                // case 3: 왼쪽 아래 13x13
+                                // case 3: ???? ??? 13x13
                                 2: begin
                                     for (y = 0; y < 13; y = y + 1) begin
                                         for (x = 1; x < 14; x = x + 1) begin
@@ -219,7 +228,7 @@ module accumulator #(
                                     end
                                 end
                     
-                                // case 4: 오른쪽 14x13
+                                // case 4: ?????? 14x13
                                 3: begin
                                     for (y = 0; y < 14; y = y + 1) begin
                                         for (x = 0; x < 13; x = x + 1) begin
@@ -228,14 +237,14 @@ module accumulator #(
                                     end
                                 end
                     
-                                // case 5: 전체 14x14 복사
+                                // case 5: ??? 14x14 ????
                                 4: begin
                                     for (p = 0; p < 196; p = p + 1) begin
                                         acc_out_reg[p] <= acc_out_reg[p] + mul_out_reg[p];
                                     end
                                 end
                     
-                                // case 6: 왼쪽 14x13
+                                // case 6: ???? 14x13
                                 5: begin
                                     for (y = 0; y < 14; y = y + 1) begin
                                         for (x = 1; x < 14; x = x + 1) begin
@@ -244,7 +253,7 @@ module accumulator #(
                                     end
                                 end
                     
-                                // case 7: 오른쪽 위 13x13
+                                // case 7: ?????? ?? 13x13
                                 6: begin
                                     for (y = 1; y < 14; y = y + 1) begin
                                         for (x = 0; x < 13; x = x + 1) begin
@@ -253,7 +262,7 @@ module accumulator #(
                                     end
                                 end
                     
-                                // case 8: 위쪽 13x14
+                                // case 8: ???? 13x14
                                 7: begin
                                     for (y = 1; y < 14; y = y + 1) begin
                                         for (x = 0; x < 14; x = x + 1) begin
@@ -262,7 +271,7 @@ module accumulator #(
                                     end
                                 end
                     
-                                // case 9: 왼쪽 위 13x13
+                                // case 9: ???? ?? 13x13
                                 8: begin
                                     for (y = 1; y < 14; y = y + 1) begin
                                         for (x = 1; x < 14; x = x + 1) begin
@@ -273,26 +282,26 @@ module accumulator #(
                                 
                                 9: begin
                                 
-                                    // 1. 임시 버퍼 초기화
+                                    // 1. ??? ???? ????
                                     for (k = 0; k < PIXEL; k = k + 1) begin
                                         temp[k] = 0;
                                     end
                                 
-                                    // 2. 오른쪽 아래 13×13 채우기
+                                    // 2. ?????? ??? 13??13 ????
                                     for (y = 0; y < 13; y = y + 1) begin
                                         for (x = 0; x < 13; x = x + 1) begin
                                             temp[(y + 1) * 14 + (x + 1)] = mul_out_reg[y * 14 + x];
                                         end
                                     end
                                 
-                                    // 3. acc_out_reg에 반영
+                                    // 3. acc_out_reg?? ???
                                     for (k = 0; k < PIXEL; k = k + 1) begin
                                         acc_out_reg[k] <= temp[k];
                                     end
                                 end
                                                                 
                                 
-                                // default (optional): 아무 작업도 하지 않음
+                                // default (optional): ??? ????? ???? ????
                                 default: begin
                                     // no operation
                                 end

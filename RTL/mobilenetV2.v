@@ -58,7 +58,7 @@ module mobilenetV2 #(
 //////////////////////////////////////////////////
 // BN_RELU
     wire signed [IO_WIDTH * PIXEL - 1 : 0] bn_relu_out;
-
+    wire [3:0] bn_cnt;
     
 //////////////////////////////////////////////////
 // bram_0
@@ -96,19 +96,19 @@ module mobilenetV2 #(
 // bram_bias
     wire                                        ena_bias_0;
     wire  [ADDR_CHANNEL-1 : 0]                  addra_bias_0;
-    wire  [31:0]                                douta_bias_0;
+    wire  signed        [31:0]                  douta_bias_0;
 // bram_mean
     wire                                        ena_mean_0;
     wire  [ADDR_CHANNEL-1 : 0]                  addra_mean_0;
-    wire  [31:0]                                douta_mean_0;
+    wire  signed        [31:0]                  douta_mean_0;
 // bram_std
     wire                                        ena_std_0;
     wire  [ADDR_CHANNEL-1 : 0]                  addra_std_0;
-    wire  [31:0]                                douta_std_0;
+    wire  signed        [31:0]                  douta_std_0;
 // bram_weight
     wire                                        ena_weight_0;
     wire  [ADDR_CHANNEL-1 : 0]                  addra_weight_0;
-    wire  [31:0]                                douta_weight_0;
+    wire  signed        [31:0]                  douta_weight_0;
     
 //////////////////////////////////////////////////
 
@@ -160,6 +160,7 @@ glbl_ctrl glbl_ctrl_0 (
     .clk                (clk),
     .rst_n              (rst_n),
     .state              (state),
+    .bn_cnt             (bn_cnt),
     .pw_1_valid         (pw_1_valid),   
     .dw_valid           (dw_valid), 
     .save_valid         (save_valid),
@@ -253,6 +254,7 @@ BN_RELU BN_RELU_0 (
     .bias               (douta_bias_0),
     .std                (douta_std_0),
     .acc_out            (acc_out), 
+    .bn_cnt             (bn_cnt),
     .bn_relu_out        (bn_relu_out), 
     .save_valid         (save_valid),
     .pw_1_bn_relu_done  (pw_1_bn_relu_done)

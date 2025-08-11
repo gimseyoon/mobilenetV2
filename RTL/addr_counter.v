@@ -15,7 +15,8 @@ module addr_counter #(
     input                               clk,
     input                               rst_n,
     input           [2:0]               state,
-    input           [14:0]               glbl_cnt,
+    input           [3:0]               bn_cnt,
+    input           [14:0]              glbl_cnt,
     input           [ADDR_CHANNEL-1:0]  acc_cnt,
     input                               save_valid,
     input                               pw_1_valid,
@@ -110,7 +111,7 @@ module addr_counter #(
                         addra_1 <= addra_1 + 1;
                     end
                 // bram_param
-                    if(pw_1_valid) begin
+                    if(bn_cnt == 4'd2) begin
                         addra_bias_0 <= addra_bias_0 + 1; 
                         addra_mean_0 <= addra_mean_0 + 1; 
                         addra_std_0 <= addra_std_0 + 1; 

@@ -11,73 +11,110 @@ module BN_RELU #(
     input                                       rst_n,
     input                                       pw_1_valid,
     input                                       bn_en,
-    input                             [31:0]    mean,
-    input                             [31:0]    weight,
-    input                             [31:0]    bias,
-    input                             [31:0]    std,
-    input  signed [IO_WIDTH * PIXEL - 1 : 0]    acc_out,        // [3920-1 : 0], 3920 bit
-    output signed [IO_WIDTH * PIXEL - 1 : 0]    bn_relu_out,    // [3920-1 : 0], 3920 bit
-    output                                      save_valid,
+    input  signed                     [31:0]    mean,
+    input  signed                     [31:0]    weight,
+    input  signed                     [31:0]    bias,
+    input  signed                     [31:0]    std,
+    input  signed [IO_WIDTH * PIXEL - 1 : 0]    acc_out,        // [3528-1 : 0], 3528 bit
+    output signed [IO_WIDTH * PIXEL - 1 : 0]    bn_relu_out,    // [3528-1 : 0], 3528 bit
+    output reg                        [3:0]    bn_cnt,          // 0~13
+    output reg                                 save_valid,
     output reg                                 pw_1_bn_relu_done
     );
     
-//////////////////////////////////////////////////
-    reg                    [5:0] bn_cnt;            // 0~48
+    
+////////////////////////////////////////////////////////////
+
+    localparam IDLE         = 3'b000,
+               PW_1         = 3'b001,
+               PW_1_BN_RELU = 3'b010,
+               DW           = 3'b011,
+               DW_BN_RELU   = 3'b100,
+               PW_2         = 3'b101,
+               PW_2_BN      = 3'b110,
+               SK           = 3'b111;
+
+////////////////////////////////////////////////////////////
+    
+    reg                    [3:0] bn_save_cnt;      // 0~13
     reg      [ADDR_CHANNEL-1 :0] bn_channel_num;
     reg  signed [IO_WIDTH-1 : 0] acc_out_reg       [0 : PIXEL-1];
-    wire        [IO_WIDTH-1 : 0] acc_selected      [3:0];
-    wire         [IO_WIDTH-1 :0] bn_single_out     [3:0];
-    reg          [IO_WIDTH-1 :0] bn_relu_out_array [PIXEL-1 :0];
+    wire signed [IO_WIDTH-1 : 0] acc_selected      [13:0];
+    wire signed [IO_WIDTH-1 : 0] bn_single_out     [13:0];
+    reg  signed [IO_WIDTH-1 : 0] bn_relu_out_array [PIXEL-1 :0];
+    wire                  [13:0] valid_single;
+    wire                         bn_valid;
 
+///////////////////////////////////////////////////////////////////////
 
-
-
+    assign bn_valid = &valid_single;
     
 ///////////////////////////////////////////////////////////////////////
 // assign acc_out_array[i] = acc_out[20(i+1) -1 :20*i]
 
-always @(posedge clk or negedge rst_n) begin
-    if (!rst_n) begin
-        bn_cnt <= 0;
-    end
-    else begin
-        if (bn_cnt == 48) begin 
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
             bn_cnt <= 0;
+            bn_save_cnt <= 0;
+            save_valid <= 0;
         end
-        else if(bn_en) begin
-            bn_cnt <= bn_cnt + 1;
+        else begin
+        
+            //bn_cnt
+            if (bn_cnt == 13) begin
+                bn_cnt <= 0;
+            end
+            else if(bn_en) begin
+                bn_cnt <= bn_cnt + 1;
+            end
+            
+            //bn_save_cnt
+            if(bn_valid) begin
+                if(bn_save_cnt == 13) begin
+                    bn_save_cnt <= 0;
+                end
+                else begin
+                    bn_save_cnt <= bn_save_cnt + 1;
+                end
+            end
+            else begin
+                bn_save_cnt <= 0;
+            end
+            
+            //save_valid
+            if (bn_valid && bn_save_cnt == 13) save_valid <= 1'b1;
+            else                               save_valid <= 1'b0;
         end
     end
-end
 
 
 ///////////////////////////////////////////////////////////////////////
 // assign acc_out_array[i] = acc_out[20(i+1) -1 :20*i]
 
-genvar i;
-generate
-    for (i = 0; i < PIXEL; i = i + 1) begin : REG_ARRAY_ASSIGN
-        always @(posedge clk or negedge rst_n) begin
-            if (!rst_n)
-                acc_out_reg[i] <= 0;
-            else
-                if(pw_1_valid) begin
-                    acc_out_reg[i] <= acc_out[IO_WIDTH*(i+1)-1 : IO_WIDTH*i];
-                end
+    genvar i;
+    generate
+        for (i = 0; i < PIXEL; i = i + 1) begin : REG_ARRAY_ASSIGN
+            always @(posedge clk or negedge rst_n) begin
+                if (!rst_n)
+                    acc_out_reg[i] <= 0;
+                else
+                    if(pw_1_valid) begin
+                        acc_out_reg[i] <= acc_out[IO_WIDTH*(i+1)-1 : IO_WIDTH*i];
+                    end
+            end
         end
-    end
-endgenerate
+    endgenerate
     
     
     
 ///////////////////////////////////////////////////////////////////////
 // aacc_selected <= acc_out_reg
-genvar s;
-generate
-    for (s = 0; s < 4; s = s + 1) begin : SELECT_ACC
-        assign acc_selected[s] = acc_out_reg[bn_cnt*4 + s];
-    end
-endgenerate
+    genvar s;
+    generate
+        for (s = 0; s < 14; s = s + 1) begin : SELECT_ACC
+            assign acc_selected[s] = acc_out_reg[bn_cnt*14 + s];
+        end
+    endgenerate
 
 
 
@@ -87,7 +124,7 @@ endgenerate
     genvar k;
     generate
         for (k = 0; k < PIXEL; k = k + 1) begin : PACK_OUTPUT
-            assign bn_relu_out [(IO_WIDTH*k+1)-1 : IO_WIDTH*k] = (save_valid) ? bn_relu_out_array[k] : 0;
+            assign bn_relu_out [IO_WIDTH*(k+1)-1 : IO_WIDTH*k] = (save_valid) ? bn_relu_out_array[k] : 0;
         end
     endgenerate
     
@@ -101,29 +138,34 @@ endgenerate
             bn_channel_num <= 0;
         end
         else begin
-            if (save_valid) begin bn_channel_num <= (bn_channel_num == 383) ? 0 : bn_channel_num + 1; end
+            if (bn_save_cnt == 13) begin
+                if (bn_channel_num == 383)
+                    bn_channel_num <= 0;
+                else
+                    bn_channel_num <= bn_channel_num + 1;
+            end
         end
-    end
+    end //always
+
 
 
 ///////////////////////////////////////////////////////////////////////
 // bn_relu_out_array
 
-    integer q;
+    integer q,t;
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             for (q = 0; q < PIXEL; q = q + 1)
                 bn_relu_out_array[q] <= 0;
         end 
         else begin
-            if (save_valid) begin
-                bn_relu_out_array[bn_cnt * 4 + 0] <= bn_single_out[0];
-                bn_relu_out_array[bn_cnt * 4 + 1] <= bn_single_out[1];
-                bn_relu_out_array[bn_cnt * 4 + 2] <= bn_single_out[2];
-                bn_relu_out_array[bn_cnt * 4 + 3] <= bn_single_out[3];
-            end 
+            if(bn_valid) begin
+                for (t = 0; t < 14; t = t + 1) begin
+                    bn_relu_out_array[bn_save_cnt*14 + t] <= bn_single_out[t];
+                end
+            end
         end 
-    end
+    end //always
 
 ///////////////////////////////////////////////////////////////////////
 // pw_1_bn_relu_done
@@ -134,7 +176,7 @@ endgenerate
                 pw_1_bn_relu_done <= 0;
         end 
         else begin
-            if ( (bn_cnt == 6'd48) && (bn_channel_num == 9'd383) ) begin   
+            if ( (bn_cnt == 6'd13) && (bn_channel_num == 9'd383) ) begin   
                 pw_1_bn_relu_done <= 1;
             end
             else begin
@@ -147,22 +189,16 @@ endgenerate
 ///////////////////////////////////////////////////////////////////////
     genvar p;
     generate
-        for (p = 0; p < 4; p = p + 1) begin : BN_UNIT
-            BN_RELU_SINGLE #(
-                .IO_WIDTH(IO_WIDTH)
-            ) BN_RELU_SINGLE_0 (
-                .clk(clk),
-                .rst_n(rst_n),
-                .pw_1_valid(pw_1_valid),
-                .bn_en(bn_en),
-                .mean(mean),
-                .weight(weight),
-                .bias(bias),
-                .std(std),
-                .acc_in(acc_selected[i]),
-                .bn_out(bn_single_out[i]),
-                .valid_out(save_valid)
-            );
+        for (p=0; p<14; p=p+1) begin : BN_UNIT
+          BN_RELU_SINGLE #(.IO_WIDTH(IO_WIDTH)) u_bn (
+            .clk(clk), 
+            .rst_n(rst_n),
+            .bn_en(bn_en),
+            .mean(mean), .weight(weight), .bias(bias), .std(std),
+            .acc_in(acc_selected[p]),
+            .bn_out(bn_single_out[p]),
+            .valid_out(valid_single[p])
+          );
         end
     endgenerate
     

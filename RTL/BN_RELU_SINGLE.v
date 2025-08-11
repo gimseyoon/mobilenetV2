@@ -3,7 +3,6 @@ module BN_RELU_SINGLE #(
 )(
     input clk,
     input rst_n,
-    input pw_1_valid,
     input bn_en,
 
     input [31:0] mean,
@@ -18,6 +17,8 @@ module BN_RELU_SINGLE #(
 
 /////////////////////////////////////////////////////////////////////////////
 
+  
+    
     wire signed [31:0] data_f2f_out;
     wire valid_f2f_out;
 
@@ -38,8 +39,10 @@ module BN_RELU_SINGLE #(
 
 /////////////////////////////////////////////////////////////////////////////
 
-    assign bn_out     = (valid_f2fx_out) ? data_f2fx_out[15:0] : 0;
+    assign bn_out     = (valid_f2fx_out) ? data_f2fx_out: 0;
     assign valid_out  = valid_f2fx_out;
+    
+
     
 /////////////////////////////////////////////////////////////////////////////
     

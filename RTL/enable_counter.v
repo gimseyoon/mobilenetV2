@@ -12,8 +12,9 @@ module enable_counter #(
 )(
     input                     clk,
     input                     rst_n,
-    input       [2:0]         state,
-    input       [8:0]         glbl_cnt,
+    input               [2:0] state,
+    input               [3:0] bn_cnt,
+    input               [8:0] glbl_cnt,
     input  [ADDR_CHANNEL-1:0] acc_cnt,
     input                     pw_1_valid,
 
@@ -76,6 +77,19 @@ always @(posedge clk or negedge rst_n) begin
         else begin
 
             case (state)
+                IDLE: begin
+                    ena_0         <= 0;
+                    wea_0         <= 0;
+                    enb_0         <= 0;
+                    enb_1         <= 0;
+                    ena_w0        <= 0; 
+                    ena_w1        <= 0; 
+                    ena_w2        <= 0; 
+                    ena_bias_0    <= 0;
+                    ena_mean_0    <= 0;
+                    ena_std_0     <= 0;
+                    ena_weight_0  <= 0;
+                end
                 PW_1: begin
                 
                 //bram_0, bram_W 
@@ -89,13 +103,13 @@ always @(posedge clk or negedge rst_n) begin
                     end
                     
                 //bram_param
-                    if(acc_cnt == 60) begin            
+                    if(bn_cnt == 4'd2) begin            
                         ena_bias_0   <= 1;
                         ena_mean_0   <= 1;  
                         ena_std_0    <= 1;
                         ena_weight_0 <= 1;                
                     end
-                    else if(acc_cnt == 62) begin
+                    else if(bn_cnt == 4'd4) begin
                         ena_bias_0   <= 0;
                         ena_mean_0   <= 0;  
                         ena_std_0    <= 0;
@@ -133,7 +147,7 @@ always @(posedge clk or negedge rst_n) begin
                     ena_weight_0  <= 0;
                     ena_weight_0  <= 0;                    
                 end
-                // 나머지 상태는 기본값 유지 (0)
+                // ?????? ?????? ???? ???? (0)
             endcase
         end //else
     end //always

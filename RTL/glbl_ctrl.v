@@ -11,6 +11,7 @@ module glbl_ctrl #(
     input                               clk,
     input                               rst_n,
     input                        [2:0]  state,
+    input                        [3:0]  bn_cnt, // 0~13
     input                               pw_1_valid,
     input                               dw_valid,
     input                               save_valid,
@@ -166,6 +167,7 @@ end
         .clk                (clk),
         .rst_n              (rst_n),
         .state              (state),
+        .bn_cnt             (bn_cnt),
         .glbl_cnt           (glbl_cnt),
         .acc_cnt            (acc_cnt),
         .save_valid         (save_valid),
@@ -194,6 +196,7 @@ end
         .clk              (clk),
         .rst_n            (rst_n),
         .state            (state),
+        .bn_cnt           (bn_cnt),
         .glbl_cnt         (glbl_cnt),
         .acc_cnt          (acc_cnt),
         .pw_1_valid       (pw_1_valid),
