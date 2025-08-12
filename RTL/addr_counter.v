@@ -1,4 +1,3 @@
-//new addr_counter
 
 `timescale 1ns / 1ps
 
@@ -19,7 +18,6 @@ module addr_counter #(
     input           [14:0]              glbl_cnt,
     input           [ADDR_CHANNEL-1:0]  acc_cnt,
     input                               save_valid,
-    input                               pw_1_valid,
     input                               enb_0,
     input                               enb_1,
     output reg      [ADDR_CHANNEL-1:0] channel_num,
@@ -47,13 +45,13 @@ module addr_counter #(
 
     localparam IDLE         = 3'b000,
                PW_1         = 3'b001,
-               PW_1_BN_RELU = 3'b010,
+               PW_1_RST     = 3'b010,
                DW           = 3'b011,
-               DW_BN_RELU   = 3'b100,
+               DW_RST       = 3'b100,
                PW_2         = 3'b101,
-               PW_2_BN      = 3'b110,
+               PW_2_RST     = 3'b110,
                SK           = 3'b111;
-               
+
 ////////////////////////////////////////////////////////////
 
     reg [3:0] cnt_9;
@@ -73,10 +71,10 @@ module addr_counter #(
             addra_w0        <= 0;
             addra_w1        <= 0;
             addra_w2        <= 0;
-            addra_bias_0    <= 0;
-            addra_mean_0    <= 0;
-            addra_std_0     <= 0;
-            addra_weight_0  <= 0;
+            addra_bias_0    <= 9'd511;
+            addra_mean_0    <= 9'd511;
+            addra_std_0     <= 9'd511;
+            addra_weight_0  <= 9'd511;
         end 
         else begin
             case (state)
@@ -90,10 +88,10 @@ module addr_counter #(
                     addra_w0        <= 0;
                     addra_w1        <= 0;
                     addra_w2        <= 0;
-                    addra_bias_0    <= 0;
-                    addra_mean_0    <= 0;
-                    addra_std_0     <= 0;
-                    addra_weight_0  <= 0;
+                    addra_bias_0    <= 9'd511;
+                    addra_mean_0    <= 9'd511;
+                    addra_std_0     <= 9'd511;
+                    addra_weight_0  <= 9'd511;
                 end
 
                 PW_1: begin
@@ -107,7 +105,7 @@ module addr_counter #(
                         end
                     end
                     
-                    if(acc_cnt == 9'd63) begin
+                    if(save_valid) begin
                         addra_1 <= addra_1 + 1;
                     end
                 // bram_param
@@ -120,20 +118,22 @@ module addr_counter #(
                     
                 end //PW_1
                 
-                PW_1_BN_RELU: begin
-
-                end
                 DW: begin
                     if(enb_1) begin
                         if (glbl_cnt < 15'd3456) begin
-                            if (cnt_9 == 4'd8) begin
+                            if((cnt_9 <= 4'd7) || (cnt_9 == 4'd14)) begin
+                                addra_w1 <= addra_w1 + 1;
+                            end
+
+                            
+                            if (cnt_9 == 4'd14) begin
                                 cnt_9 <= 0;
                                 addrb_1 <= addrb_1 + 1;
                             end 
                             else begin
                                 cnt_9 <= cnt_9 + 1;
                             end
-                            addra_w1 <= addra_w1 + 1;
+
                         end 
                         else begin
                             addrb_1  <= 0;
@@ -141,7 +141,15 @@ module addr_counter #(
                         end
                     end
                 end
-                // Other states: modify in future
+                
+                PW_2: begin
+                
+                end // PW_2
+                                
+                SK: begin
+                
+                end // SK
+                
                 default: begin
                     cnt_9           <= 0;
                     channel_num     <= 0;
@@ -150,11 +158,14 @@ module addr_counter #(
                     addra_1         <= 0;
                     addrb_1         <= 0;
                     addra_w0        <= 0;
-                    addra_bias_0    <= 0;
-                    addra_mean_0    <= 0;
-                    addra_std_0     <= 0;
-                    addra_weight_0  <= 0;
-                end
+                    addra_w1        <= 0;
+                    addra_w2        <= 0;
+                    addra_bias_0    <= 9'd511;
+                    addra_mean_0    <= 9'd511;
+                    addra_std_0     <= 9'd511;
+                    addra_weight_0  <= 9'd511;
+                end // Default
+                
             endcase
         end
     end

@@ -19,11 +19,11 @@ module FSM(
 
     localparam IDLE         = 3'b000,
                PW_1         = 3'b001,
-               PW_1_BN_RELU = 3'b010,
+               PW_1_RST     = 3'b010,
                DW           = 3'b011,
-               DW_BN_RELU   = 3'b100,
+               DW_RST       = 3'b100,
                PW_2         = 3'b101,
-               PW_2_BN      = 3'b110,
+               PW_2_RST     = 3'b110,
                SK           = 3'b111;
 
 ////////////////////////////////////////////////////////////
@@ -48,12 +48,12 @@ module FSM(
         ns = state;
         case(state)
             IDLE:           if(start)               ns = PW_1;        
-            PW_1:           if(pw_1_bn_relu_done)   ns = DW;
-            PW_1_BN_RELU:   if(pw_1_bn_relu_done)   ns = DW;          
-            DW:             if(dw_done)             ns = DW_BN_RELU;  
-            DW_BN_RELU:     if(dw_bn_relu_done)     ns = PW_2;        
-            PW_2:           if(pw_2_done)           ns = PW_2_BN;     
-            PW_2_BN:        if(pw_2_bn_done)        ns = SK;          
+            PW_1:           if(pw_1_bn_relu_done)   ns = PW_1_RST;
+            PW_1_RST:                               ns = DW;          
+            DW:             if(dw_bn_relu_done)     ns = DW_RST;  
+            DW_RST:                                 ns = PW_2;        
+            PW_2:           if(pw_2_bn_done)        ns = PW_2_RST;     
+            PW_2_RST:                               ns = SK;          
             SK:             if(layer_done)          ns = IDLE;        
             default: ns = IDLE;
         endcase

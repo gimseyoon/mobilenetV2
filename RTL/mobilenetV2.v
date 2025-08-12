@@ -15,28 +15,23 @@ module mobilenetV2 #(
     input start
 );
     
-//////////////////////////////////////////////////
+////////////////////////////////////////////////////////////
 
     localparam IDLE         = 3'b000,
                PW_1         = 3'b001,
-               PW_1_BN_RELU = 3'b010,
+               PW_1_RST     = 3'b010,
                DW           = 3'b011,
-               DW_BN_RELU   = 3'b100,
+               DW_RST       = 3'b100,
                PW_2         = 3'b101,
-               PW_2_BN      = 3'b110,
+               PW_2_RST     = 3'b110,
                SK           = 3'b111;
 
-//////////////////////////////////////////////////
-    
+////////////////////////////////////////////////////////////
+
 //////////////////////////////////////////////////
 // FSM
     wire [2:0] state;
-    wire pw_1_bn_relu_done;
-    wire dw_bn_relu_done;
 
-    wire pw_2_bn_done;
-    wire layer_done;
-    wire bn_relu_valid;
 //////////////////////////////////////////////////
 // multiplier
     reg signed [IO_WIDTH * PIXEL - 1 : 0] mul_in;   // [3920-1 : 0], 3920 bit
@@ -59,7 +54,10 @@ module mobilenetV2 #(
 // BN_RELU
     wire signed [IO_WIDTH * PIXEL - 1 : 0] bn_relu_out;
     wire [3:0] bn_cnt;
-    
+    wire pw_1_bn_relu_done;
+    wire dw_bn_relu_done;
+    wire pw_2_bn_done;
+    wire layer_done;
 //////////////////////////////////////////////////
 // bram_0
     wire                                        ena_0;
@@ -122,11 +120,13 @@ module mobilenetV2 #(
                 mul_in = doutb_0;
                 mul_weight = douta_w0;
             end
-            PW_1_BN_RELU: begin
-                mul_in = 0;
-                mul_weight = 0;
-            end
+
             DW: begin
+                mul_in = doutb_1;
+                mul_weight = douta_w1;
+            end
+            
+            PW_2: begin
                 mul_in = doutb_1;
                 mul_weight = douta_w1;
             end
@@ -161,13 +161,12 @@ glbl_ctrl glbl_ctrl_0 (
     .rst_n              (rst_n),
     .state              (state),
     .bn_cnt             (bn_cnt),
-    .pw_1_valid         (pw_1_valid),   
-    .dw_valid           (dw_valid), 
     .save_valid         (save_valid),
     .channel_num        (channel_num),
     .acc_out            (acc_out),
     .acc_cnt            (acc_cnt),
-    
+    .bn_relu_out        (bn_relu_out), 
+    .pw_1_done          (pw_1_done),
     
 // BRAM A
     .ena_0              (ena_0),
@@ -247,7 +246,10 @@ multiplier multiplier_0 (
 BN_RELU BN_RELU_0 (
     .clk                (clk),
     .rst_n              (rst_n),
+    .state              (state),
     .pw_1_valid         (pw_1_valid),
+    .dw_valid           (dw_valid),
+    .pw_2_valid         (pw_2_valid),
     .bn_en              (bn_en),
     .mean               (douta_mean_0),
     .weight             (douta_weight_0),

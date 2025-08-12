@@ -8,17 +8,16 @@ module glbl_ctrl #(
     parameter ADDR_WMEM = $clog2(384 * 64),       // 15 (for 64*384 = 24576)
     parameter ADDR_W1_MEM = $clog2(384 * 9)       // 12 (for 9*384 = 3456)
 )(
-    input                               clk,
-    input                               rst_n,
-    input                        [2:0]  state,
-    input                        [3:0]  bn_cnt, // 0~13
-    input                               pw_1_valid,
-    input                               dw_valid,
-    input                               save_valid,
-    input           [ADDR_CHANNEL-1:0]  channel_num,
-    input  signed [IO_WIDTH*PIXEL-1:0]  acc_out,
-    input         [ADDR_CHANNEL -1 :0]  acc_cnt,
-    
+    input                                   clk,
+    input                                   rst_n,
+    input                          [2:0]    state,
+    input                          [3:0]    bn_cnt, // 0~13
+    input                                   save_valid,
+    input             [ADDR_CHANNEL-1:0]    channel_num,
+    input  signed   [IO_WIDTH*PIXEL-1:0]    acc_out,
+    input           [ADDR_CHANNEL -1 :0]    acc_cnt,
+    input  signed [IO_WIDTH * PIXEL-1:0]    bn_relu_out,    // [3528-1 : 0], 3528 bit
+    input                                   pw_1_done,
 ////////////////////////////////////////////////////////////////////////////
 // bram_A
     output                              ena_0,
@@ -60,18 +59,18 @@ module glbl_ctrl #(
     output         [ADDR_CHANNEL-1 : 0] addra_weight_0
 );
 
-//////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////
 
     localparam IDLE         = 3'b000,
                PW_1         = 3'b001,
-               PW_1_BN_RELU = 3'b010,
+               PW_1_RST     = 3'b010,
                DW           = 3'b011,
-               DW_BN_RELU   = 3'b100,
+               DW_RST       = 3'b100,
                PW_2         = 3'b101,
-               PW_2_BN      = 3'b110,
+               PW_2_RST     = 3'b110,
                SK           = 3'b111;
 
-//////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////
 
     reg [14:0] glbl_cnt; // (0 ~ 32,767)
 
@@ -92,8 +91,8 @@ module glbl_ctrl #(
                 end //IDLE
                 
                 PW_1: begin
-                    if(pw_1_valid) begin
-                        dina_1 = acc_out;
+                    if(save_valid) begin
+                        dina_1 = bn_relu_out;
                         dina_0 = 0;
                     end  
                     else begin
@@ -101,14 +100,10 @@ module glbl_ctrl #(
                         dina_0 = 0;
                     end
                 end //PW_1
-                
-                PW_1_BN_RELU: begin
-                
-                end
-                
+
                 DW: begin
-                    if(dw_valid) begin
-                        dina_1 = acc_out;
+                    if(save_valid) begin
+                        dina_1 = bn_relu_out;
                         dina_0 = 0;
                     end  
                     else begin
@@ -116,10 +111,15 @@ module glbl_ctrl #(
                         dina_0 = 0;
                     end
                 end //DW   
-
+                
+                PW_2: begin
+                
+                end
+                
                 // Other states: modify in future
                 default: begin
-
+                    dina_0 = 0; 
+                    dina_1 = 0;
                 end
             endcase
         end
@@ -137,15 +137,8 @@ always @(posedge clk or negedge rst_n) begin
     end else begin
         case (state)
             PW_1: begin
-                if (glbl_cnt >= 15'd24576 + 15'd7)
-                    glbl_cnt <= 0;
-                else
-                    glbl_cnt <= glbl_cnt + 1;
-            end
-            
-            PW_1_BN_RELU: begin
-                
-            end
+                glbl_cnt <= glbl_cnt + 1;
+            end // PW_1
             
             DW: begin
                 if (glbl_cnt >= 15'd3256 + 15'd3)
@@ -171,7 +164,6 @@ end
         .glbl_cnt           (glbl_cnt),
         .acc_cnt            (acc_cnt),
         .save_valid         (save_valid),
-        .pw_1_valid         (pw_1_valid),
         .channel_num        (channel_num),
         .enb_0              (enb_0),
         .enb_1              (enb_1),
@@ -199,7 +191,7 @@ end
         .bn_cnt           (bn_cnt),
         .glbl_cnt         (glbl_cnt),
         .acc_cnt          (acc_cnt),
-        .pw_1_valid       (pw_1_valid),
+        .save_valid       (save_valid),
         
         .ena_0           (ena_0),
         .wea_0           (wea_0),

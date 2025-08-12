@@ -5,11 +5,14 @@ module BN_RELU #(
     parameter PIXEL = ROW * COLUMN,                 // 14 * 14 = 196
     parameter W_WIDTH = 17,
     parameter ADDR_CHANNEL  = $clog2(384),          // 9 (for CHANNEL = 384)
-    parameter ADDR_WMEM = $clog2(384 * 64)          // 15 (for 64*384 = 24576)
+    parameter ADDR_WMEM = $clog2(384 * 64)         // 15 (for 64*384 = 24576)
 )(
     input                                       clk,
     input                                       rst_n,
+    input                             [2:0]     state,
     input                                       pw_1_valid,
+    input                                       dw_valid,
+    input                                       pw_2_valid,
     input                                       bn_en,
     input  signed                     [31:0]    mean,
     input  signed                     [31:0]    weight,
@@ -27,11 +30,11 @@ module BN_RELU #(
 
     localparam IDLE         = 3'b000,
                PW_1         = 3'b001,
-               PW_1_BN_RELU = 3'b010,
+               PW_1_RST     = 3'b010,
                DW           = 3'b011,
-               DW_BN_RELU   = 3'b100,
+               DW_RST       = 3'b100,
                PW_2         = 3'b101,
-               PW_2_BN      = 3'b110,
+               PW_2_RST     = 3'b110,
                SK           = 3'b111;
 
 ////////////////////////////////////////////////////////////
@@ -98,7 +101,7 @@ module BN_RELU #(
                 if (!rst_n)
                     acc_out_reg[i] <= 0;
                 else
-                    if(pw_1_valid) begin
+                    if(pw_1_valid || dw_valid || pw_2_valid) begin
                         acc_out_reg[i] <= acc_out[IO_WIDTH*(i+1)-1 : IO_WIDTH*i];
                     end
             end
@@ -119,7 +122,7 @@ module BN_RELU #(
 
 
 ///////////////////////////////////////////////////////////////////////
-// assign bn_relu_out[3920-1 :0] = bn_relu_out_array [20-1 :0][196-1 :0]
+// assign bn_relu_out[3528-1 :0] = bn_relu_out_array [18-1 :0][196-1 :0]
 
     genvar k;
     generate
@@ -152,19 +155,32 @@ module BN_RELU #(
 ///////////////////////////////////////////////////////////////////////
 // bn_relu_out_array
 
-    integer q,t;
+    integer q, t, idx;
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             for (q = 0; q < PIXEL; q = q + 1)
                 bn_relu_out_array[q] <= 0;
         end 
         else begin
-            if(bn_valid) begin
+            if (bn_valid) begin
                 for (t = 0; t < 14; t = t + 1) begin
-                    bn_relu_out_array[bn_save_cnt*14 + t] <= bn_single_out[t];
-                end
-            end
-        end 
+                    idx = bn_save_cnt*14 + t;
+    
+                    if (state == PW_1 || state == DW) begin
+                        if (bn_single_out[t][IO_WIDTH-1])
+                            bn_relu_out_array[idx] <= 0;
+                        else
+                            bn_relu_out_array[idx] <= bn_single_out[t];
+                    end
+                    else if (state == PW_2) begin
+                        bn_relu_out_array[idx] <= bn_single_out[t];
+                    end 
+                    else begin
+                        bn_relu_out_array[idx] <= 0;
+                    end
+                end //for
+            end // if(bn_valid)
+        end // !rst_n1 //
     end //always
 
 ///////////////////////////////////////////////////////////////////////
@@ -176,7 +192,7 @@ module BN_RELU #(
                 pw_1_bn_relu_done <= 0;
         end 
         else begin
-            if ( (bn_cnt == 6'd13) && (bn_channel_num == 9'd383) ) begin   
+            if ( (bn_save_cnt == 6'd13) && (bn_channel_num == 9'd383) ) begin   
                 pw_1_bn_relu_done <= 1;
             end
             else begin

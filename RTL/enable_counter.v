@@ -14,9 +14,9 @@ module enable_counter #(
     input                     rst_n,
     input               [2:0] state,
     input               [3:0] bn_cnt,
-    input               [8:0] glbl_cnt,
+    input              [14:0] glbl_cnt,
     input  [ADDR_CHANNEL-1:0] acc_cnt,
-    input                     pw_1_valid,
+    input                     save_valid,
 
     // BRAM 0
     output reg                ena_0,
@@ -40,21 +40,21 @@ module enable_counter #(
     output reg                ena_weight_0
 );
 
-////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////
 
     localparam IDLE         = 3'b000,
                PW_1         = 3'b001,
-               PW_1_BN_RELU = 3'b010,
+               PW_1_RST     = 3'b010,
                DW           = 3'b011,
-               DW_BN_RELU   = 3'b100,
+               DW_RST       = 3'b100,
                PW_2         = 3'b101,
-               PW_2_BN      = 3'b110,
+               PW_2_RST     = 3'b110,
                SK           = 3'b111;
 
-///////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////
 
-    assign ena_1 = (pw_1_valid) ? 1 : 0;
-    assign wea_1 = (pw_1_valid) ? 1 : 0;
+    assign ena_1 = (save_valid) ? 1 : 0;
+    assign wea_1 = (save_valid) ? 1 : 0;
 
 
 ///////////////////////////////////////////////////////////////////////
@@ -89,7 +89,7 @@ always @(posedge clk or negedge rst_n) begin
                     ena_mean_0    <= 0;
                     ena_std_0     <= 0;
                     ena_weight_0  <= 0;
-                end
+                end // IDLE
                 PW_1: begin
                 
                 //bram_0, bram_W 
@@ -117,11 +117,7 @@ always @(posedge clk or negedge rst_n) begin
                     end
                     
                 end // PW_1
-
-                PW_1_BN_RELU: begin
-
-                end // PW_1_BN_RELU
-
+                
                 DW: begin
                 //bram_0
                     if (glbl_cnt >= 15'd3457) begin
@@ -133,6 +129,15 @@ always @(posedge clk or negedge rst_n) begin
                         ena_w1 <= 1;
                     end
                 end //DW
+
+                PW_2: begin
+                
+                end // PW_2
+     
+                SK: begin
+                
+                end // SK
+                
                 default: begin
                     ena_0         <= 0;
                     wea_0         <= 0;
@@ -146,8 +151,8 @@ always @(posedge clk or negedge rst_n) begin
                     ena_std_0     <= 0;
                     ena_weight_0  <= 0;
                     ena_weight_0  <= 0;                    
-                end
-                // ?????? ?????? ???? ???? (0)
+                end // Default
+                
             endcase
         end //else
     end //always

@@ -103,4 +103,8 @@ module tb_addr_counter;
         $stop;
     end
 
+<<<<<<< HEAD
 endmodule
+=======
+endmodule
+>>>>>>> cd5d375ebbe5b2d89c1741d5fc379a7068d5594e
