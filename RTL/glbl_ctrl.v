@@ -4,6 +4,8 @@ module glbl_ctrl #(
     parameter COLUMN = 14,
     parameter PIXEL = ROW * COLUMN,              // 14 * 14 = 196
     parameter W_WIDTH = 17,
+    parameter INPUT_CHANNEL = 64,
+    parameter ADDR_PARAM = 10,
     parameter ADDR_CHANNEL  = $clog2(384),        // 9 (for CHANNEL = 384)
     parameter ADDR_WMEM = $clog2(384 * 64),       // 15 (for 64*384 = 24576)
     parameter ADDR_W1_MEM = $clog2(384 * 9)       // 12 (for 9*384 = 3456)
@@ -13,50 +15,49 @@ module glbl_ctrl #(
     input                          [2:0]    state,
     input                          [3:0]    bn_cnt, // 0~13
     input                                   save_valid,
-    input             [ADDR_CHANNEL-1:0]    channel_num,
     input  signed   [IO_WIDTH*PIXEL-1:0]    acc_out,
     input           [ADDR_CHANNEL -1 :0]    acc_cnt,
     input  signed [IO_WIDTH * PIXEL-1:0]    bn_relu_out,    // [3528-1 : 0], 3528 bit
     input                                   pw_1_done,
 ////////////////////////////////////////////////////////////////////////////
 // bram_A
-    output                              ena_0,
-    output                              wea_0,
-    output          [ADDR_CHANNEL-1:0]  addra_0,
+    output                                  ena_0,
+    output                                  wea_0,
+    output          [INPUT_CHANNEL-1:0]     addra_0,
     output reg signed [IO_WIDTH*PIXEL-1:0]  dina_0,
-    output                              enb_0,
-    output          [ADDR_CHANNEL-1:0]  addrb_0,
+    output                                  enb_0,
+    output          [INPUT_CHANNEL-1:0]     addrb_0,
 
 // bram_B
-    output                              ena_1,
-    output                              wea_1,
-    output           [ADDR_CHANNEL-1:0] addra_1,
+    output                                  ena_1,
+    output                                  wea_1,
+    output           [ADDR_CHANNEL-1:0]     addra_1,
     output reg signed [IO_WIDTH*PIXEL-1:0]  dina_1,
-    output                              enb_1,
-    output           [ADDR_CHANNEL-1:0] addrb_1,
+    output                                  enb_1,
+    output           [ADDR_CHANNEL-1:0]     addrb_1,
 
 // bram_W0
-    output                              ena_w0,
-    output              [ADDR_WMEM-1:0] addra_w0,
+    output                                  ena_w0,
+    output              [ADDR_WMEM-1:0]     addra_w0,
 // bram_W1
-    output                              ena_w1,
-    output              [ADDR_W1_MEM-1:0] addra_w1,
+    output                                  ena_w1,
+    output            [ADDR_W1_MEM-1:0]     addra_w1,
 // bram_W2
-    output                              ena_w2,
-    output              [ADDR_WMEM-1:0] addra_w2,
+    output                                  ena_w2,
+    output              [ADDR_WMEM-1:0]     addra_w2,
 ////////////////////////////////////////////////////////////////////////////
 // BRAM bias
-    output                              ena_bias_0,    
-    output         [ADDR_CHANNEL-1 : 0] addra_bias_0,
+    output                                  ena_bias_0,    
+    output           [ADDR_PARAM-1 : 0]     addra_bias_0,
 // BRAM mean
-    output                              ena_mean_0,    
-    output         [ADDR_CHANNEL-1 : 0] addra_mean_0,  
+    output                                  ena_mean_0,    
+    output           [ADDR_PARAM-1 : 0]     addra_mean_0,  
 // BRAM std
-    output                              ena_std_0,     
-    output         [ADDR_CHANNEL-1 : 0] addra_std_0,   
+    output                                  ena_std_0,     
+    output           [ADDR_PARAM-1 : 0]     addra_std_0,   
 // BRAM weight    
-    output                              ena_weight_0,  
-    output         [ADDR_CHANNEL-1 : 0] addra_weight_0
+    output                                  ena_weight_0,  
+    output           [ADDR_PARAM-1 : 0]     addra_weight_0
 );
 
 ////////////////////////////////////////////////////////////
@@ -73,7 +74,6 @@ module glbl_ctrl #(
 ////////////////////////////////////////////////////////////
 
     reg [14:0] glbl_cnt; // (0 ~ 32,767)
-
 
 //////////////////////////////////////////////////////////////
 // dina_0 / dina_1
@@ -141,10 +141,7 @@ always @(posedge clk or negedge rst_n) begin
             end // PW_1
             
             DW: begin
-                if (glbl_cnt >= 15'd3256 + 15'd3)
-                    glbl_cnt <= 0;
-                else
-                    glbl_cnt <= glbl_cnt + 1;
+                glbl_cnt <= glbl_cnt + 1;
             end
             default: begin
                 glbl_cnt <= 0;
@@ -164,7 +161,7 @@ end
         .glbl_cnt           (glbl_cnt),
         .acc_cnt            (acc_cnt),
         .save_valid         (save_valid),
-        .channel_num        (channel_num),
+        
         .enb_0              (enb_0),
         .enb_1              (enb_1),
         

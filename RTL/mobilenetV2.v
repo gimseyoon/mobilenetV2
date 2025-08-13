@@ -6,6 +6,8 @@ module mobilenetV2 #(
     parameter COLUMN = 14,
     parameter PIXEL = ROW * COLUMN,              // 14 * 14 = 196
     parameter W_WIDTH = 17,
+    parameter INPUT_CHANNEL = 64,
+    parameter ADDR_PARAM = 10,
     parameter ADDR_CHANNEL  = $clog2(384),        // 9 (for CHANNEL = 384)
     parameter ADDR_WMEM = $clog2(384 * 64),       // 15 (for 64*384 = 24576)
     parameter ADDR_W1_MEM = $clog2(384 * 9)       // 12 (for 9*384 = 3456)
@@ -41,7 +43,6 @@ module mobilenetV2 #(
 //////////////////////////////////////////////////
 //accumultaor
     wire signed [IO_WIDTH * PIXEL - 1 : 0] acc_out;
-    wire [ADDR_CHANNEL-1 : 0] channel_num;
     wire pw_1_valid;   
     wire pw_1_done;
     wire dw_valid;
@@ -62,10 +63,10 @@ module mobilenetV2 #(
 // bram_0
     wire                                        ena_0;
     wire                                        wea_0;
-    wire  [ADDR_CHANNEL-1:0]                    addra_0;
+    wire  [INPUT_CHANNEL-1:0]                   addra_0;
     wire  signed [IO_WIDTH * PIXEL - 1 : 0]     dina_0;
     wire                                        enb_0;
-    wire  [ADDR_CHANNEL-1:0]                    addrb_0;
+    wire  [INPUT_CHANNEL-1:0]                   addrb_0;
     wire  signed [IO_WIDTH * PIXEL - 1 : 0]     doutb_0;
 // bram_1
     wire                                        ena_1;
@@ -93,20 +94,20 @@ module mobilenetV2 #(
     
 // bram_bias
     wire                                        ena_bias_0;
-    wire  [ADDR_CHANNEL-1 : 0]                  addra_bias_0;
-    wire  signed        [31:0]                  douta_bias_0;
+    wire    [ADDR_PARAM-1 : 0]                  addra_bias_0;
+    wire    signed      [31:0]                  douta_bias_0;
 // bram_mean
     wire                                        ena_mean_0;
-    wire  [ADDR_CHANNEL-1 : 0]                  addra_mean_0;
-    wire  signed        [31:0]                  douta_mean_0;
+    wire    [ADDR_PARAM-1 : 0]                  addra_mean_0;
+    wire    signed      [31:0]                  douta_mean_0;
 // bram_std
     wire                                        ena_std_0;
-    wire  [ADDR_CHANNEL-1 : 0]                  addra_std_0;
-    wire  signed        [31:0]                  douta_std_0;
+    wire    [ADDR_PARAM-1 : 0]                  addra_std_0;
+    wire    signed      [31:0]                  douta_std_0;
 // bram_weight
     wire                                        ena_weight_0;
-    wire  [ADDR_CHANNEL-1 : 0]                  addra_weight_0;
-    wire  signed        [31:0]                  douta_weight_0;
+    wire    [ADDR_PARAM-1 : 0]                  addra_weight_0;
+    wire    signed      [31:0]                  douta_weight_0;
     
 //////////////////////////////////////////////////
 
@@ -162,7 +163,6 @@ glbl_ctrl glbl_ctrl_0 (
     .state              (state),
     .bn_cnt             (bn_cnt),
     .save_valid         (save_valid),
-    .channel_num        (channel_num),
     .acc_out            (acc_out),
     .acc_cnt            (acc_cnt),
     .bn_relu_out        (bn_relu_out), 
@@ -227,7 +227,6 @@ accumulator accumulator_0 (
     .dw_done            (dw_done),
     .pw_2_valid         (pw_2_valid),
     .pw_2_done          (pw_2_done),
-    .channel_num        (channel_num),
     .acc_out            (acc_out)
 );
     
@@ -267,18 +266,18 @@ BN_RELU BN_RELU_0 (
 // BRAM (INPUT, OUTPUT, WEIGHT)
 
 // BRAM_A
-blk_mem_gen_0 bram_A (
-  .clka                 (clk),          // input wire clka
-  .ena                  (ena_0),        // input wire ena
-  .wea                  (wea_0),        // input wire [0 : 0] wea
-  .addra                (addra_0),      // input wire [8 : 0] addra
-  .dina                 (dina_0),       // input wire [3527 : 0] dina
-  .clkb                 (clk),          // input wire clkb
-  .enb                  (enb_0),        // input wire enb
-  .addrb                (addrb_0),      // input wire [8 : 0] addrb
-  .doutb                (doutb_0)       // output wire [3527 : 0] doutb
-);
 
+bram_A bram_A (
+  .clka(clk),    // input wire clka
+  .ena(ena_0),      // input wire ena
+  .wea(wea_0),      // input wire [0 : 0] wea
+  .addra(addra_0),  // input wire [5 : 0] addra
+  .dina(dina_0),    // input wire [3527 : 0] dina
+  .clkb(clk),    // input wire clkb
+  .enb(enb_0),      // input wire enb
+  .addrb(addrb_0),  // input wire [5 : 0] addrb
+  .doutb(doutb_0)  // output wire [3527 : 0] doutb
+);
 // BRAM_B
 blk_mem_gen_1 bram_B (
   .clka                 (clk),          // input wire clka
@@ -320,33 +319,32 @@ blk_mem_gen_4 bram_w2 (
 ///////////////////////////////////////////////////////////////
 // bram_PARAMETER 
 bram_bias bram_bias_0 (
-  .clka                 (clk),              // input wire clka
-  .ena                  (ena_bias_0),       // input wire ena
-  .addra                (addra_bias_0),     // input wire [8 : 0] addra
-  .douta                (douta_bias_0)      // output wire [31 : 0] douta
+  .clka(clk),    // input wire clka
+  .ena(ena_bias_0),      // input wire ena
+  .addra(addra_bias_0),  // input wire [9 : 0] addra
+  .douta(douta_bias_0)  // output wire [31 : 0] douta
 );
 
 bram_mean bram_mean_0 (
-  .clka                 (clk),              // input wire clka
-  .ena                  (ena_mean_0),       // input wire ena
-  .addra                (addra_mean_0),     // input wire [8 : 0] addra
-  .douta                (douta_mean_0)      // output wire [31 : 0] douta
+  .clka(clk),    // input wire clka
+  .ena(ena_mean_0),      // input wire ena
+  .addra(addra_mean_0),  // input wire [9 : 0] addra
+  .douta(douta_mean_0)  // output wire [31 : 0] douta
 );
 
 bram_std bram_std_0 (
-  .clka                 (clk),              // input wire clka
-  .ena                  (ena_std_0),        // input wire ena
-  .addra                (addra_std_0),      // input wire [8 : 0] addra
-  .douta                (douta_std_0)       // output wire [31 : 0] douta
+  .clka(clk),    // input wire clka
+  .ena(ena_std_0),      // input wire ena
+  .addra(addra_std_0),  // input wire [9 : 0] addra
+  .douta(douta_std_0)  // output wire [31 : 0] douta
 );
 
 bram_weight bram_weight_0 (
-  .clka                 (clk),              // input wire clka
-  .ena                  (ena_weight_0),     // input wire ena
-  .addra                (addra_weight_0),   // input wire [8 : 0] addra
-  .douta                (douta_weight_0)    // output wire [31 : 0] douta
+  .clka(clk),    // input wire clka
+  .ena(ena_weight_0),      // input wire ena
+  .addra(addra_weight_0),  // input wire [9 : 0] addra
+  .douta(douta_weight_0)  // output wire [31 : 0] douta
 );
-
 /////////////////////////////////////////////////////////////
 
 endmodule

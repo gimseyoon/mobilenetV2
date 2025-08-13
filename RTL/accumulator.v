@@ -22,7 +22,6 @@ module accumulator #(
     output reg                                 dw_done,
     output reg                                 pw_2_valid,
     output reg                                 pw_2_done,
-    output reg          [ADDR_CHANNEL-1 :0]    channel_num,
     output signed [IO_WIDTH * PIXEL - 1 : 0]    acc_out    // [3920-1 : 0], 3920 bit
 );
 
@@ -38,11 +37,10 @@ module accumulator #(
                SK           = 3'b111;
 
 ////////////////////////////////////////////////////////////
-
+    reg [ADDR_CHANNEL-1 :0] channel_num;
     reg [3:0] bn_en_cnt;
     reg signed [IO_WIDTH-1:0] acc_out_reg [0:PIXEL-1];  // [20-1: 0]] acc_out_reg [196-1 :0]*/
     reg [7:0] state_delay;
-    reg signed [IO_WIDTH-1:0] temp [0:PIXEL-1];
     wire pw_1_en;
     wire dw_en;
     wire signed [IO_WIDTH-1:0] mul_out_reg [0:PIXEL-1]; // Convert [3920-1 :0] mul_out -> [20-1 :0] mul_out_reg [196-1 :0]

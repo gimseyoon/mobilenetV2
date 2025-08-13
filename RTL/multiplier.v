@@ -24,8 +24,8 @@ module multiplier #(
     );
 /////////////////////////////////////////////////////////////////////////
 
-    reg signed [IO_WIDTH-1 :0] mul_out_reg [PIXEL-1 :0]; // [384][14][14]
-    wire signed [34:0] mul_out_w [PIXEL-1:0]; //[196-1 :0]
+    reg signed [IO_WIDTH-1 :0] mul_out_reg [0 : PIXEL-1]; // [384][14][14]
+    wire signed [34:0] mul_out_w [0 : PIXEL-1]; //[196-1 :0]
     
 /////////////////////////////////////////////////////////////////////////
 // concat : mul_out_reg <= { mul_out_w[k][36] , mul_out_w[k][34 :16] }
@@ -77,7 +77,7 @@ module multiplier #(
           .CLK(clk),
           .A($signed(mul_in[ IO_WIDTH*(PIXEL - i)-1 : IO_WIDTH*(PIXEL - i - 1) ])),
           .B(mul_weight),
-          .P(mul_out_w[i])
+          .P(mul_out_w[PIXEL-1-i])
         );
       end
     endgenerate

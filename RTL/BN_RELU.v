@@ -42,9 +42,9 @@ module BN_RELU #(
     reg                    [3:0] bn_save_cnt;      // 0~13
     reg      [ADDR_CHANNEL-1 :0] bn_channel_num;
     reg  signed [IO_WIDTH-1 : 0] acc_out_reg       [0 : PIXEL-1];
-    wire signed [IO_WIDTH-1 : 0] acc_selected      [13:0];
-    wire signed [IO_WIDTH-1 : 0] bn_single_out     [13:0];
-    reg  signed [IO_WIDTH-1 : 0] bn_relu_out_array [PIXEL-1 :0];
+    wire signed [IO_WIDTH-1 : 0] acc_selected      [0:13];
+    wire signed [IO_WIDTH-1 : 0] bn_single_out     [0:13];
+    reg  signed [IO_WIDTH-1 : 0] bn_relu_out_array [0 : PIXEL-1];
     wire                  [13:0] valid_single;
     wire                         bn_valid;
 

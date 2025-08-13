@@ -128,6 +128,21 @@ always @(posedge clk or negedge rst_n) begin
                         enb_1  <= 1;
                         ena_w1 <= 1;
                     end
+                    
+                //bram_param
+                    if(glbl_cnt >= 15'd3457) begin            
+                        ena_bias_0   <= 0;
+                        ena_mean_0   <= 0;  
+                        ena_std_0    <= 0;
+                        ena_weight_0 <= 0;                
+                    end
+                    else begin
+                        ena_bias_0   <= 1;
+                        ena_mean_0   <= 1;  
+                        ena_std_0    <= 1;
+                        ena_weight_0 <= 1;
+                    end
+                    
                 end //DW
 
                 PW_2: begin

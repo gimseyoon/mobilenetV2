@@ -7,6 +7,8 @@ module addr_counter #(
     parameter COLUMN = 14,
     parameter PIXEL = ROW * COLUMN,              // 14 * 14 = 196
     parameter W_WIDTH = 17,
+    parameter INPUT_CHANNEL = 64,
+    parameter ADDR_PARAM = 10,
     parameter ADDR_CHANNEL  = $clog2(384),        // 9 (for CHANNEL = 384)
     parameter ADDR_WMEM = $clog2(384 * 64),       // 15 (for 64*384 = 24576)
     parameter ADDR_W1_MEM = $clog2(384 * 9)       // 12 (for 9*384 = 3456)
@@ -17,14 +19,14 @@ module addr_counter #(
     input           [3:0]               bn_cnt,
     input           [14:0]              glbl_cnt,
     input           [ADDR_CHANNEL-1:0]  acc_cnt,
+    input                       [12:0]  dw_cnt, // 0 ~ 5760( = (14+1) x 384 )
     input                               save_valid,
     input                               enb_0,
     input                               enb_1,
-    output reg      [ADDR_CHANNEL-1:0] channel_num,
 
     // BRAM 0
-    output reg      [ADDR_CHANNEL-1:0]  addra_0,
-    output reg      [ADDR_CHANNEL-1:0]  addrb_0,
+    output reg     [INPUT_CHANNEL-1:0]  addra_0,
+    output reg     [INPUT_CHANNEL-1:0]  addrb_0,
 
     // BRAM 1
     output reg      [ADDR_CHANNEL-1:0]  addra_1,
@@ -36,10 +38,10 @@ module addr_counter #(
     output reg      [ADDR_WMEM-1:0]     addra_w2,
     
     // BN Parameter BRAMs
-    output reg      [ADDR_CHANNEL-1:0]  addra_bias_0,
-    output reg      [ADDR_CHANNEL-1:0]  addra_mean_0,
-    output reg      [ADDR_CHANNEL-1:0]  addra_std_0,
-    output reg      [ADDR_CHANNEL-1:0]  addra_weight_0
+    output reg        [ADDR_PARAM-1:0]  addra_bias_0,
+    output reg        [ADDR_PARAM-1:0]  addra_mean_0,
+    output reg        [ADDR_PARAM-1:0]  addra_std_0,
+    output reg        [ADDR_PARAM-1:0]  addra_weight_0
 );
 ////////////////////////////////////////////////////////////
 
@@ -50,20 +52,22 @@ module addr_counter #(
                DW_RST       = 3'b100,
                PW_2         = 3'b101,
                PW_2_RST     = 3'b110,
-               SK           = 3'b111;
-
+               SK           = 3'b111,
+               
+               DW_OFFSET    = 10'd384,
+               PW_2_OFFSET  = 10'd448;
+                
 ////////////////////////////////////////////////////////////
 
     reg [3:0] cnt_9;
-    
+    reg       mean_run,  std_run,  weight_run,  bias_run;
+    reg [3:0] mean_phase,std_phase,weight_phase,bias_phase;
 ////////////////////////////////////////////////////////////
 // addr_counter
-
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             cnt_9           <= 0;
-            channel_num     <= 0;
             addra_0         <= 0;
             addrb_0         <= 0;
             addra_1         <= 0;
@@ -71,16 +75,17 @@ module addr_counter #(
             addra_w0        <= 0;
             addra_w1        <= 0;
             addra_w2        <= 0;
-            addra_bias_0    <= 9'd511;
-            addra_mean_0    <= 9'd511;
-            addra_std_0     <= 9'd511;
-            addra_weight_0  <= 9'd511;
+            addra_bias_0    <= 10'd1023;
+            addra_mean_0    <= 10'd1023;
+            addra_std_0     <= 10'd1023;
+            addra_weight_0  <= 10'd1023;
+            mean_run   <= 1'b0; std_run   <= 1'b0; weight_run   <= 1'b0; bias_run   <= 1'b0;
+            mean_phase <= 4'd0; std_phase <= 4'd0; weight_phase <= 4'd0; bias_phase <= 4'd0;
         end 
         else begin
             case (state)
                 IDLE: begin
                     cnt_9           <= 0;
-                    channel_num     <= 0;
                     addra_0         <= 0;
                     addrb_0         <= 0;
                     addra_1         <= 0;
@@ -88,10 +93,10 @@ module addr_counter #(
                     addra_w0        <= 0;
                     addra_w1        <= 0;
                     addra_w2        <= 0;
-                    addra_bias_0    <= 9'd511;
-                    addra_mean_0    <= 9'd511;
-                    addra_std_0     <= 9'd511;
-                    addra_weight_0  <= 9'd511;
+                    addra_bias_0    <= 10'd1023;
+                    addra_mean_0    <= 10'd1023;
+                    addra_std_0     <= 10'd1023;
+                    addra_weight_0  <= 10'd1023;
                 end
 
                 PW_1: begin
@@ -118,6 +123,15 @@ module addr_counter #(
                     
                 end //PW_1
                 
+                PW_1_RST: begin
+                    addra_bias_0    <= DW_OFFSET;
+                    addra_mean_0    <= DW_OFFSET;
+                    addra_std_0     <= DW_OFFSET;
+                    addra_weight_0  <= DW_OFFSET;
+                    mean_run   <= 1'b0; std_run   <= 1'b0; weight_run   <= 1'b0; bias_run   <= 1'b0;
+                    mean_phase <= 4'd0; std_phase <= 4'd0; weight_phase <= 4'd0; bias_phase <= 4'd0;
+                end
+                
                 DW: begin
                     if(enb_1) begin
                         if (glbl_cnt < 15'd3456) begin
@@ -139,7 +153,78 @@ module addr_counter #(
                             addrb_1  <= 0;
                             addra_w1 <= 0;
                         end
+                    end // if(enb_1)
+                    
+                    if(save_valid) begin
+                        addra_1 <= addra_1 + 1;
                     end
+
+                // ===== mean: base=36 이후 15주기 =====
+                    if (glbl_cnt == 13'd45) begin
+                        addra_mean_0 <= addra_mean_0 + 1'b1;   // 베이스에서 1회 증가
+                        mean_run     <= 1'b1;                  // 런 시작
+                        mean_phase   <= 4'd0;                  // 주기 카운터 0으로 정렬
+                    end 
+                    else if (mean_run) begin
+                        if (mean_phase == 4'd14) begin         // 15클럭마다
+                            addra_mean_0 <= addra_mean_0 + 1'b1;
+                            mean_phase   <= 4'd0;
+                        end 
+                        else begin
+                        mean_phase <= mean_phase + 1'b1;
+                        end
+                    end
+              
+                    // ===== std: base=47 이후 15주기 =====
+                    if (glbl_cnt == 13'd60) begin
+                        addra_std_0  <= addra_std_0 + 1'b1;
+                        std_run      <= 1'b1;
+                        std_phase    <= 4'd0;
+                    end 
+                    else if (std_run) begin
+                        if (std_phase == 4'd14) begin
+                            addra_std_0 <= addra_std_0 + 1'b1;
+                            std_phase   <= 4'd0;
+                        end else begin
+                            std_phase <= std_phase + 1'b1;
+                        end
+                    end
+              
+                    // ===== weight: base=75 이후 15주기 =====
+                    if (glbl_cnt == 13'd73) begin
+                        addra_weight_0 <= addra_weight_0 + 1'b1;
+                        weight_run     <= 1'b1;
+                        weight_phase   <= 4'd0;
+                    end else if (weight_run) begin
+                        if (weight_phase == 4'd14) begin
+                            addra_weight_0 <= addra_weight_0 + 1'b1;
+                            weight_phase   <= 4'd0;
+                        end else begin
+                            weight_phase <= weight_phase + 1'b1;
+                        end
+                    end
+              
+                    // ===== bias: base=83 이후 15주기 =====
+                    if (glbl_cnt == 13'd81) begin
+                        addra_bias_0 <= addra_bias_0 + 1'b1;
+                        bias_run     <= 1'b1;
+                        bias_phase   <= 4'd0;
+                    end else if (bias_run) begin
+                        if (bias_phase == 4'd14) begin
+                            addra_bias_0 <= addra_bias_0 + 1'b1;
+                            bias_phase   <= 4'd0;
+                        end else begin
+                            bias_phase <= bias_phase + 1'b1;
+                        end
+                    end       
+                    
+                end // DW
+                
+                DW_RST: begin
+                    addra_bias_0    <= PW_2_OFFSET;
+                    addra_mean_0    <= PW_2_OFFSET;
+                    addra_std_0     <= PW_2_OFFSET;
+                    addra_weight_0  <= PW_2_OFFSET;
                 end
                 
                 PW_2: begin
@@ -152,7 +237,6 @@ module addr_counter #(
                 
                 default: begin
                     cnt_9           <= 0;
-                    channel_num     <= 0;
                     addra_0         <= 0;
                     addrb_0         <= 0;
                     addra_1         <= 0;
@@ -160,10 +244,10 @@ module addr_counter #(
                     addra_w0        <= 0;
                     addra_w1        <= 0;
                     addra_w2        <= 0;
-                    addra_bias_0    <= 9'd511;
-                    addra_mean_0    <= 9'd511;
-                    addra_std_0     <= 9'd511;
-                    addra_weight_0  <= 9'd511;
+                    addra_bias_0    <= 10'd1023;
+                    addra_mean_0    <= 10'd1023;
+                    addra_std_0     <= 10'd1023;
+                    addra_weight_0  <= 10'd1023;
                 end // Default
                 
             endcase
