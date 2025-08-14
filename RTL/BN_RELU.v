@@ -22,7 +22,8 @@ module BN_RELU #(
     output signed [IO_WIDTH * PIXEL - 1 : 0]    bn_relu_out,    // [3528-1 : 0], 3528 bit
     output reg                        [3:0]    bn_cnt,          // 0~13
     output reg                                 save_valid,
-    output reg                                 pw_1_bn_relu_done
+    output reg                                 pw_1_bn_relu_done,
+    output reg                                 dw_bn_relu_done
     );
     
     
@@ -180,23 +181,29 @@ module BN_RELU #(
                     end
                 end //for
             end // if(bn_valid)
-        end // !rst_n1 //
+        end // !rst_n1
     end //always
 
 ///////////////////////////////////////////////////////////////////////
-// pw_1_bn_relu_done
+// pw_1_bn_relu_done, dw_bn_relu_done
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            for (q = 0; q < PIXEL; q = q + 1)
                 pw_1_bn_relu_done <= 0;
         end 
         else begin
-            if ( (bn_save_cnt == 6'd13) && (bn_channel_num == 9'd383) ) begin   
+            if ( (state==PW_1) && (bn_save_cnt == 6'd13) && (bn_channel_num == 9'd383) ) begin   
                 pw_1_bn_relu_done <= 1;
             end
             else begin
                 pw_1_bn_relu_done <= 0;
+            end
+            
+            if ( (state==DW) && (bn_save_cnt == 6'd13) && (bn_channel_num == 9'd383) ) begin   
+                dw_bn_relu_done <= 1;
+            end
+            else begin
+                dw_bn_relu_done <= 0;
             end
         end //else
     end //always

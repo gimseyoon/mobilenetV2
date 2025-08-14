@@ -14,7 +14,9 @@ module mobilenetV2 #(
 )(
     input clk,
     input rst_n,
-    input start
+    input start,
+    output [13:0] dw_bn_relu_out
+
 );
     
 ////////////////////////////////////////////////////////////
@@ -28,7 +30,6 @@ module mobilenetV2 #(
                PW_2_RST     = 3'b110,
                SK           = 3'b111;
 
-////////////////////////////////////////////////////////////
 
 //////////////////////////////////////////////////
 // FSM
@@ -59,6 +60,7 @@ module mobilenetV2 #(
     wire dw_bn_relu_done;
     wire pw_2_bn_done;
     wire layer_done;
+    
 //////////////////////////////////////////////////
 // bram_0
     wire                                        ena_0;
@@ -109,6 +111,16 @@ module mobilenetV2 #(
     wire    [ADDR_PARAM-1 : 0]                  addra_weight_0;
     wire    signed      [31:0]                  douta_weight_0;
     
+    
+////////////////////////////////////////////////////////////
+
+    genvar j;
+    generate
+        for (j = 0; j < 14; j = j + 1) begin
+            assign dw_bn_relu_out[j] = bn_relu_out[(j * 18 * 14) + 17];
+        end
+    endgenerate
+    
 //////////////////////////////////////////////////
 
     always@(*) begin
@@ -129,7 +141,7 @@ module mobilenetV2 #(
             
             PW_2: begin
                 mul_in = doutb_1;
-                mul_weight = douta_w1;
+                mul_weight = douta_w2;
             end
             default: begin
                 mul_in = 0;
@@ -235,11 +247,14 @@ accumulator accumulator_0 (
 multiplier multiplier_0 (
     .clk                (clk),
     .rst_n              (rst_n),
+    .pw_1_done          (pw_1_done),
+    .dw_done            (dw_done),
+    .pw_2_done          (pw_2_done),
     .mul_in             (mul_in),
     .mul_weight         (mul_weight),
     .mul_out            (mul_out)
 );
-    
+
 //////////////////////////////////////////////////
 // Instantiate BN_RELU
 BN_RELU BN_RELU_0 (
@@ -258,7 +273,8 @@ BN_RELU BN_RELU_0 (
     .bn_cnt             (bn_cnt),
     .bn_relu_out        (bn_relu_out), 
     .save_valid         (save_valid),
-    .pw_1_bn_relu_done  (pw_1_bn_relu_done)
+    .pw_1_bn_relu_done  (pw_1_bn_relu_done),
+    .dw_bn_relu_done    (dw_bn_relu_done)
 );
 
     

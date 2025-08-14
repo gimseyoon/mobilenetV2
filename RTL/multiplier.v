@@ -38,7 +38,7 @@ module multiplier #(
             end
         end
         else begin
-            if(pw_1_done || dw_done || pw_2_done) begin
+            if(pw_1_done || dw_done || pw_2_done ) begin
                 for(k=0; k < PIXEL; k = k+1) begin
                     mul_out_reg[k] <= 0;
                 end
@@ -54,7 +54,7 @@ module multiplier #(
     
     
 ////////////////////////////////////////////////////////////////////////
-// assign [3920-1 :0] mul_out = [20-1:0] mul_out_reg [196-1 :0]
+// assign [3528-1 :0] mul_out = [18-1:0] mul_out_reg [196-1 :0]
 
     genvar m;
     generate

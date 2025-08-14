@@ -59,7 +59,7 @@ module addr_counter #(
                 
 ////////////////////////////////////////////////////////////
 
-    reg [3:0] cnt_9;
+    reg [3:0] cnt;
     reg       mean_run,  std_run,  weight_run,  bias_run;
     reg [3:0] mean_phase,std_phase,weight_phase,bias_phase;
 ////////////////////////////////////////////////////////////
@@ -67,7 +67,7 @@ module addr_counter #(
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            cnt_9           <= 0;
+            cnt           <= 0;
             addra_0         <= 0;
             addrb_0         <= 0;
             addra_1         <= 0;
@@ -85,7 +85,7 @@ module addr_counter #(
         else begin
             case (state)
                 IDLE: begin
-                    cnt_9           <= 0;
+                    cnt           <= 0;
                     addra_0         <= 0;
                     addrb_0         <= 0;
                     addra_1         <= 0;
@@ -124,6 +124,7 @@ module addr_counter #(
                 end //PW_1
                 
                 PW_1_RST: begin
+                    addra_1 <= 0;
                     addra_bias_0    <= DW_OFFSET;
                     addra_mean_0    <= DW_OFFSET;
                     addra_std_0     <= DW_OFFSET;
@@ -134,18 +135,29 @@ module addr_counter #(
                 
                 DW: begin
                     if(enb_1) begin
-                        if (glbl_cnt < 15'd3456) begin
-                            if((cnt_9 <= 4'd7) || (cnt_9 == 4'd14)) begin
-                                addra_w1 <= addra_w1 + 1;
-                            end
+                        if (glbl_cnt < 15'd5838) begin
+                            if((cnt <= 4'd7) || (cnt == 4'd14)) begin
+                                if(addra_w1 == 3455) begin
+                                    addra_w1 <= 0;
+                                end
+                                else begin
+                                    addra_w1 <= addra_w1 + 1;
+                                end
 
+                            end
                             
-                            if (cnt_9 == 4'd14) begin
-                                cnt_9 <= 0;
-                                addrb_1 <= addrb_1 + 1;
+                            if (cnt == 4'd14) begin
+                                cnt <= 0;
+                                if(addrb_1 == 383) begin
+                                    addrb_1 <= 0;
+                                end
+                                else begin
+                                    addrb_1 <= addrb_1 + 1;
+                                end
+
                             end 
                             else begin
-                                cnt_9 <= cnt_9 + 1;
+                                cnt <= cnt + 1;
                             end
 
                         end 
@@ -160,7 +172,7 @@ module addr_counter #(
                     end
 
                 // ===== mean: base=36 이후 15주기 =====
-                    if (glbl_cnt == 13'd45) begin
+                    if (glbl_cnt == 13'd35) begin
                         addra_mean_0 <= addra_mean_0 + 1'b1;   // 베이스에서 1회 증가
                         mean_run     <= 1'b1;                  // 런 시작
                         mean_phase   <= 4'd0;                  // 주기 카운터 0으로 정렬
@@ -176,7 +188,7 @@ module addr_counter #(
                     end
               
                     // ===== std: base=47 이후 15주기 =====
-                    if (glbl_cnt == 13'd60) begin
+                    if (glbl_cnt == 13'd46) begin
                         addra_std_0  <= addra_std_0 + 1'b1;
                         std_run      <= 1'b1;
                         std_phase    <= 4'd0;
@@ -191,7 +203,7 @@ module addr_counter #(
                     end
               
                     // ===== weight: base=75 이후 15주기 =====
-                    if (glbl_cnt == 13'd73) begin
+                    if (glbl_cnt == 13'd74) begin
                         addra_weight_0 <= addra_weight_0 + 1'b1;
                         weight_run     <= 1'b1;
                         weight_phase   <= 4'd0;
@@ -205,7 +217,7 @@ module addr_counter #(
                     end
               
                     // ===== bias: base=83 이후 15주기 =====
-                    if (glbl_cnt == 13'd81) begin
+                    if (glbl_cnt == 13'd82) begin
                         addra_bias_0 <= addra_bias_0 + 1'b1;
                         bias_run     <= 1'b1;
                         bias_phase   <= 4'd0;
@@ -221,14 +233,38 @@ module addr_counter #(
                 end // DW
                 
                 DW_RST: begin
+                    addra_1 <= 0;
                     addra_bias_0    <= PW_2_OFFSET;
                     addra_mean_0    <= PW_2_OFFSET;
                     addra_std_0     <= PW_2_OFFSET;
                     addra_weight_0  <= PW_2_OFFSET;
+                    mean_run   <= 1'b0; std_run   <= 1'b0; weight_run   <= 1'b0; bias_run   <= 1'b0;
+                    mean_phase <= 4'd0; std_phase <= 4'd0; weight_phase <= 4'd0; bias_phase <= 4'd0;
                 end
                 
                 PW_2: begin
-                
+                    if(enb_1) begin
+                        if (glbl_cnt < 15'd24576) begin
+                            addrb_1 <= (addrb_1 >= 9'd383) ? 0 : addrb_1 + 1;
+                            addra_w2 <= addra_w2 + 1;
+                        end else begin
+                            addrb_1  <= 0;
+                            addra_w2 <= 0;
+                        end
+                    end
+                    
+                    if(save_valid) begin
+                        addra_1 <= addra_1 + 1;
+                        addra_bias_0 <= addra_bias_0 + 1; 
+                        addra_mean_0 <= addra_mean_0 + 1; 
+                        addra_std_0 <= addra_std_0 + 1; 
+                        addra_weight_0 <= addra_weight_0 + 1; 
+                    end
+                // bram_param
+                   /* if(bn_cnt == 4'd2) begin
+
+                    end
+                    */
                 end // PW_2
                                 
                 SK: begin
@@ -236,7 +272,7 @@ module addr_counter #(
                 end // SK
                 
                 default: begin
-                    cnt_9           <= 0;
+                    cnt           <= 0;
                     addra_0         <= 0;
                     addrb_0         <= 0;
                     addra_1         <= 0;

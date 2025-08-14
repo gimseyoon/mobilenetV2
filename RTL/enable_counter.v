@@ -120,7 +120,7 @@ always @(posedge clk or negedge rst_n) begin
                 
                 DW: begin
                 //bram_0
-                    if (glbl_cnt >= 15'd3457) begin
+                    if (glbl_cnt >= 15'd5838) begin
                         enb_1  <= 0;
                         ena_w1 <= 0;
                     end
@@ -130,7 +130,7 @@ always @(posedge clk or negedge rst_n) begin
                     end
                     
                 //bram_param
-                    if(glbl_cnt >= 15'd3457) begin            
+                    if(glbl_cnt >= 15'd5838) begin            
                         ena_bias_0   <= 0;
                         ena_mean_0   <= 0;  
                         ena_std_0    <= 0;
@@ -146,7 +146,30 @@ always @(posedge clk or negedge rst_n) begin
                 end //DW
 
                 PW_2: begin
-                
+                //bram_0, bram_W 
+                    if (glbl_cnt >= 15'd24577) begin
+                        enb_1  <= 0;
+                        ena_w2 <= 0;
+                    end
+                    else begin
+                        enb_1  <= 1;
+                        ena_w2 <= 1;
+                    end
+                    
+                //bram_param
+                    if(state==PW_2) begin            
+                        ena_bias_0   <= 1;
+                        ena_mean_0   <= 1;  
+                        ena_std_0    <= 1;
+                        ena_weight_0 <= 1;                
+                    end
+                    else begin
+                        ena_bias_0   <= 0;
+                        ena_mean_0   <= 0;  
+                        ena_std_0    <= 0;
+                        ena_weight_0 <= 0;
+                    end
+                    
                 end // PW_2
      
                 SK: begin

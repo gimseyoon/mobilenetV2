@@ -13,7 +13,9 @@ module accumulator #(
     input                                      clk,
     input                                      rst_n,
     input                              [2:0]   state,
-    input  signed  [IO_WIDTH * PIXEL - 1 :0]   mul_out,  // [3920-1 : 0], 3920 bit
+    input  signed  [IO_WIDTH * PIXEL - 1 :0]   mul_out,  // [3528-1 : 0], 3528 bit
+    // input  signed  [IO_WIDTH * PIXEL - 1 :0]   sk_in_1,  // [3528-1 : 0], 3528 bit
+    // input  signed  [IO_WIDTH * PIXEL - 1 :0]   sk_in_2,  // [3528-1 : 0], 3528 bit
     output reg                                 bn_en,
     output reg         [ADDR_CHANNEL -1 :0]    acc_cnt,
     output reg                                 pw_1_valid,
@@ -22,7 +24,7 @@ module accumulator #(
     output reg                                 dw_done,
     output reg                                 pw_2_valid,
     output reg                                 pw_2_done,
-    output signed [IO_WIDTH * PIXEL - 1 : 0]    acc_out    // [3920-1 : 0], 3920 bit
+    output signed [IO_WIDTH * PIXEL - 1 : 0]    acc_out  // [3528-1 : 0], 3528 bit
 );
 
 ////////////////////////////////////////////////////////////
@@ -43,6 +45,7 @@ module accumulator #(
     reg [7:0] state_delay;
     wire pw_1_en;
     wire dw_en;
+    wire pw_2_en;
     wire signed [IO_WIDTH-1:0] mul_out_reg [0:PIXEL-1]; // Convert [3920-1 :0] mul_out -> [20-1 :0] mul_out_reg [196-1 :0]
 
 ///////////////////////////////////////////////////////////////////////
@@ -50,7 +53,7 @@ module accumulator #(
 
     assign pw_1_en = (state==PW_1) ? state_delay[7] : 0;
     assign dw_en = (state==DW) ? state_delay[5] : 0;
-
+    assign pw_2_en = (state==PW_2) ? state_delay[7] : 0;
 
 ///////////////////////////////////////////////////////////////////////
 // state_delay (to wait bram read)
@@ -73,6 +76,8 @@ module accumulator #(
             else begin
                 state_delay <=0 ;
             end
+            
+            
         end //else
     end //always
 
@@ -171,8 +176,15 @@ module accumulator #(
                         channel_num <= 0;
                     end
                     
+                    
                     if(pw_1_valid) begin
-                        bn_en <= 1;
+                        if(channel_num == 511) begin
+                            bn_en <= 0;         
+                        end
+                        else begin
+                            bn_en <= 1;         
+                        end
+
                     end
                     else begin
                         if(bn_en_cnt == 13) bn_en <= 0;
@@ -259,12 +271,14 @@ module accumulator #(
                         end
                     endcase
                     
-                    
-                    if(dw_valid) begin
+                    if(channel_num==511 && acc_cnt == 9) begin
+                        bn_en <= 0;
+                    end
+                    else if(dw_valid) begin
                         bn_en <= 1;
                     end
-                    else begin
-                        if(bn_en_cnt == 13) bn_en <= 0;
+                    else if(bn_en_cnt == 13) begin
+                        bn_en <= 0;
                     end
                     
                     if(bn_en) begin
@@ -278,9 +292,13 @@ module accumulator #(
                     if (dw_en) begin
                         acc_cnt <= (acc_cnt == 15) ? 1 : acc_cnt + 1;
                         dw_valid <= (acc_cnt == 9);
-                        dw_done <= (acc_cnt==8) && (channel_num == 383);
-                        
-                        if (acc_cnt == 15) begin channel_num <= (channel_num == 383) ? 511 : channel_num + 1; end
+                        dw_done <= (acc_cnt==9) && (channel_num == 383);
+                                  
+                        if(acc_cnt == 15) begin
+                            if(channel_num == 383) channel_num <= 511;
+                            else if(channel_num == 511) channel_num <= channel_num;
+                            else channel_num <= channel_num + 1;
+                        end
                     end
                     else begin
                         acc_cnt <= 0;
@@ -289,7 +307,7 @@ module accumulator #(
                         channel_num <= 0;
                     end
                     
-                    if(dw_done) begin
+                    if(channel_num == 511) begin
                         for (k = 0; k < PIXEL; k = k + 1) begin
                             acc_out_reg[k] <= 0;
                         end                    
@@ -298,7 +316,57 @@ module accumulator #(
                 end //DW
                 
                 PW_2: begin
+                    if(channel_num == 511) begin
+                        for (k = 0; k < PIXEL; k = k + 1) begin
+                            acc_out_reg[k] <= 0;
+                        end
+                    end
+                    else begin
+                        for (k = 0; k < PIXEL; k = k + 1) begin
+                            if (acc_cnt >= 383) begin acc_out_reg[k] <= mul_out_reg[k];                  end // when start a new channel
+                            else                begin acc_out_reg[k] <= acc_out_reg[k] + mul_out_reg[k]; end //accumulate 
+                        end                    
+                    end              
 
+                    
+                    if (pw_2_en) begin
+                        acc_cnt <= (acc_cnt == 383) ? 0 : acc_cnt + 1;
+                        pw_2_valid <= (acc_cnt == 382);
+                        pw_2_done  <= (acc_cnt == 382) && (channel_num == 63);
+                        
+                        if(pw_2_valid) begin
+                            if(channel_num == 63) channel_num <= 511;
+                            else if(channel_num == 511) channel_num <= channel_num;
+                            else channel_num <= channel_num + 1;
+                        end
+                    end
+                    else begin
+                        acc_cnt <= 0;
+                        pw_2_valid <= 0;
+                        pw_2_done <= 0;
+                        channel_num <= 0;
+                    end
+                    
+                    
+                    if(pw_2_valid) begin
+                        if(channel_num == 511) begin
+                            bn_en <= 0;         
+                        end
+                        else begin
+                            bn_en <= 1;         
+                        end
+                    end
+                    else begin
+                        if(bn_en_cnt == 13) bn_en <= 0;
+                    end
+                    
+                    if(bn_en) begin
+                        if(bn_en_cnt == 13) bn_en_cnt <= 0;
+                        else                bn_en_cnt <= bn_en_cnt + 1;
+                    end
+                    else begin
+                        bn_en_cnt <= 0;
+                    end
                 end
 
                 SK:
@@ -312,7 +380,7 @@ module accumulator #(
                     end
                     bn_en_cnt <= 0;
                     acc_cnt <= 0;
-                    channel_num <= 0;
+                    channel_num <= 511;
                     bn_en <= 0;
                     pw_1_valid <= 0;
                     pw_1_done <= 0;
