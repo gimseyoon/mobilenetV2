@@ -24,9 +24,9 @@ module FSM(
                DW_RST       = 3'b100,
                PW_2         = 3'b101,
                PW_2_RST     = 3'b110,
-               SK           = 3'b111;
+               EXPORT       = 3'b111;
 
-////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////
 
     reg [2:0] ns;
     
@@ -53,8 +53,8 @@ module FSM(
             DW:             if(dw_bn_relu_done)     ns = DW_RST;  
             DW_RST:                                 ns = PW_2;        
             PW_2:           if(pw_2_bn_done)        ns = PW_2_RST;     
-            PW_2_RST:                               ns = SK;          
-            SK:             if(layer_done)          ns = IDLE;        
+            PW_2_RST:                               ns = EXPORT;          
+            EXPORT:         if(layer_done)          ns = IDLE;        
             default: ns = IDLE;
         endcase
     end //always

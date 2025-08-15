@@ -36,9 +36,9 @@ module accumulator #(
                DW_RST       = 3'b100,
                PW_2         = 3'b101,
                PW_2_RST     = 3'b110,
-               SK           = 3'b111;
+               EXPORT       = 3'b111;
 
-////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////
     reg [ADDR_CHANNEL-1 :0] channel_num;
     reg [3:0] bn_en_cnt;
     reg signed [IO_WIDTH-1:0] acc_out_reg [0:PIXEL-1];  // [20-1: 0]] acc_out_reg [196-1 :0]*/
@@ -274,7 +274,7 @@ module accumulator #(
                     if(channel_num==511 && acc_cnt == 9) begin
                         bn_en <= 0;
                     end
-                    else if(dw_valid) begin
+                    else if( (channel_num != 511) && (dw_valid) ) begin
                         bn_en <= 1;
                     end
                     else if(bn_en_cnt == 13) begin
@@ -316,7 +316,7 @@ module accumulator #(
                 end //DW
                 
                 PW_2: begin
-                    if(channel_num == 511) begin
+                    if(channel_num == 511 || (!state_delay[6]) ) begin
                         for (k = 0; k < PIXEL; k = k + 1) begin
                             acc_out_reg[k] <= 0;
                         end
@@ -369,7 +369,7 @@ module accumulator #(
                     end
                 end
 
-                SK:
+                EXPORT:
                     begin
                     
                     end // SK

@@ -15,6 +15,7 @@ module glbl_ctrl #(
     input                          [2:0]    state,
     input                          [3:0]    bn_cnt, // 0~13
     input                                   save_valid,
+    input                                   skip_valid,
     input  signed   [IO_WIDTH*PIXEL-1:0]    acc_out,
     input           [ADDR_CHANNEL -1 :0]    acc_cnt,
     input  signed [IO_WIDTH * PIXEL-1:0]    bn_relu_out,    // [3528-1 : 0], 3528 bit
@@ -35,7 +36,7 @@ module glbl_ctrl #(
     output reg signed [IO_WIDTH*PIXEL-1:0]  dina_1,
     output                                  enb_1,
     output           [ADDR_CHANNEL-1:0]     addrb_1,
-
+////////////////////////////////////////////////////////////////////////
 // bram_W0
     output                                  ena_w0,
     output              [ADDR_WMEM-1:0]     addra_w0,
@@ -134,19 +135,15 @@ module glbl_ctrl #(
 always @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
         glbl_cnt <= 0;
-    end else begin
-        case (state)
-            PW_1: begin
-                glbl_cnt <= glbl_cnt + 1;
-            end // PW_1
-            
-            DW: begin
-                glbl_cnt <= glbl_cnt + 1;
-            end
-            default: begin
-                glbl_cnt <= 0;
-            end
-        endcase
+    end 
+    else begin
+        if(state == PW_1 || state == DW || state == PW_2) begin
+            glbl_cnt <= glbl_cnt +1;
+        end    
+        else begin
+            glbl_cnt <= 0;
+        end
+        
     end
 end
 
@@ -161,6 +158,7 @@ end
         .glbl_cnt           (glbl_cnt),
         .acc_cnt            (acc_cnt),
         .save_valid         (save_valid),
+        .skip_valid       (skip_valid),
         
         .enb_0              (enb_0),
         .enb_1              (enb_1),

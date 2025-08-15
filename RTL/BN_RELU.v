@@ -22,8 +22,10 @@ module BN_RELU #(
     output signed [IO_WIDTH * PIXEL - 1 : 0]    bn_relu_out,    // [3528-1 : 0], 3528 bit
     output reg                        [3:0]    bn_cnt,          // 0~13
     output reg                                 save_valid,
+    output reg                                 skip_valid,
     output reg                                 pw_1_bn_relu_done,
-    output reg                                 dw_bn_relu_done
+    output reg                                 dw_bn_relu_done,
+    output reg                                 pw_2_bn_done
     );
     
     
@@ -36,9 +38,9 @@ module BN_RELU #(
                DW_RST       = 3'b100,
                PW_2         = 3'b101,
                PW_2_RST     = 3'b110,
-               SK           = 3'b111;
+               EXPORT       = 3'b111;
 
-////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////
     
     reg                    [3:0] bn_save_cnt;      // 0~13
     reg      [ADDR_CHANNEL-1 :0] bn_channel_num;
@@ -54,13 +56,14 @@ module BN_RELU #(
     assign bn_valid = &valid_single;
     
 ///////////////////////////////////////////////////////////////////////
-// assign acc_out_array[i] = acc_out[20(i+1) -1 :20*i]
+
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             bn_cnt <= 0;
             bn_save_cnt <= 0;
             save_valid <= 0;
+            skip_valid <= 0;
         end
         else begin
         
@@ -86,8 +89,22 @@ module BN_RELU #(
             end
             
             //save_valid
-            if (bn_valid && bn_save_cnt == 13) save_valid <= 1'b1;
-            else                               save_valid <= 1'b0;
+            if(state == PW_1 || state == DW) begin
+                if (bn_valid && bn_save_cnt == 13) save_valid <= 1'b1;
+                else                               save_valid <= 1'b0;
+            end
+            else begin
+                save_valid <= 0;
+            end
+            
+            if(state == PW_2) begin
+                if (bn_valid && bn_save_cnt == 13) skip_valid <= 1'b1;
+                else                               skip_valid <= 1'b0;
+            end
+            else begin
+                skip_valid <= 0;
+            end
+            
         end
     end
 
@@ -128,10 +145,9 @@ module BN_RELU #(
     genvar k;
     generate
         for (k = 0; k < PIXEL; k = k + 1) begin : PACK_OUTPUT
-            assign bn_relu_out [IO_WIDTH*(k+1)-1 : IO_WIDTH*k] = (save_valid) ? bn_relu_out_array[k] : 0;
+            assign bn_relu_out [IO_WIDTH*(k+1)-1 : IO_WIDTH*k] = (save_valid || skip_valid) ? bn_relu_out_array[k] : 0;
         end
     endgenerate
-    
     
     
 ///////////////////////////////////////////////////////////////////////
@@ -205,6 +221,14 @@ module BN_RELU #(
             else begin
                 dw_bn_relu_done <= 0;
             end
+            
+            if ( (state==PW_2) && (bn_save_cnt == 6'd13) && (bn_channel_num == 9'd63) ) begin   
+                pw_2_bn_done <= 1;
+            end
+            else begin
+                pw_2_bn_done <= 0;
+            end
+                        
         end //else
     end //always
     

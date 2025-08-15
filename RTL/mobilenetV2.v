@@ -15,6 +15,7 @@ module mobilenetV2 #(
     input clk,
     input rst_n,
     input start,
+    output signed [IO_WIDTH * PIXEL - 1 : 0] bn_relu_out,
     output [13:0] dw_bn_relu_out
 
 );
@@ -28,19 +29,26 @@ module mobilenetV2 #(
                DW_RST       = 3'b100,
                PW_2         = 3'b101,
                PW_2_RST     = 3'b110,
-               SK           = 3'b111;
+               EXPORT       = 3'b111;
 
-
-//////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////
 // FSM
     wire [2:0] state;
-
+    (* KEEP="TRUE", DONT_TOUCH="TRUE" *) reg [2:0] state_to_acc;
+    (* KEEP="TRUE", DONT_TOUCH="TRUE" *) reg [2:0] state_to_glbl;
+    (* KEEP="TRUE", DONT_TOUCH="TRUE" *) reg [2:0] state_to_mux; // mul_in_sel/mul_weight_sel¿ë
+    
+    always @(posedge clk) begin
+        state_to_acc  <= state;
+        state_to_glbl <= state;
+        state_to_mux  <= state;
+    end
 //////////////////////////////////////////////////
 // multiplier
-    reg signed [IO_WIDTH * PIXEL - 1 : 0] mul_in;   // [3920-1 : 0], 3920 bit
-    reg signed [W_WIDTH - 1 : 0] mul_weight;        // [17-1:0], 17 bit
-    wire signed [IO_WIDTH * PIXEL - 1 : 0] mul_out; // [3920-1 : 0], 3920 bit
-    
+    reg signed [IO_WIDTH * PIXEL - 1 : 0]   mul_in;   // [3528-1 : 0], 3528 bit
+    reg signed [W_WIDTH - 1 : 0]            mul_weight;        // [17-1:0], 17 bit
+    wire signed [IO_WIDTH * PIXEL - 1 : 0]  mul_out; // [3528-1 : 0], 3528 bit
+
 //////////////////////////////////////////////////
 //accumultaor
     wire signed [IO_WIDTH * PIXEL - 1 : 0] acc_out;
@@ -51,16 +59,17 @@ module mobilenetV2 #(
     wire pw_2_valid;
     wire pw_2_done;
     wire [ADDR_CHANNEL -1 :0] acc_cnt;
-    wire save_valid;
+
 //////////////////////////////////////////////////
 // BN_RELU
-    wire signed [IO_WIDTH * PIXEL - 1 : 0] bn_relu_out;
+    //wire signed [IO_WIDTH * PIXEL - 1 : 0] bn_relu_out;
     wire [3:0] bn_cnt;
     wire pw_1_bn_relu_done;
     wire dw_bn_relu_done;
     wire pw_2_bn_done;
     wire layer_done;
-    
+    wire save_valid;
+    wire skip_valid;
 //////////////////////////////////////////////////
 // bram_0
     wire                                        ena_0;
@@ -122,7 +131,7 @@ module mobilenetV2 #(
     endgenerate
     
 //////////////////////////////////////////////////
-
+// decide multiplier input
     always@(*) begin
         case(state)
             IDLE: begin
@@ -149,6 +158,8 @@ module mobilenetV2 #(
             end
         endcase
     end    
+
+
 //////////////////////////////////////////////////
 // Instantiate FSM
 FSM FSM_0 (
@@ -172,9 +183,10 @@ FSM FSM_0 (
 glbl_ctrl glbl_ctrl_0 (
     .clk                (clk),
     .rst_n              (rst_n),
-    .state              (state),
+    .state              (state_to_glbl),
     .bn_cnt             (bn_cnt),
     .save_valid         (save_valid),
+    .skip_valid         (skip_valid),
     .acc_out            (acc_out),
     .acc_cnt            (acc_cnt),
     .bn_relu_out        (bn_relu_out), 
@@ -229,7 +241,7 @@ glbl_ctrl glbl_ctrl_0 (
 accumulator accumulator_0 (
     .clk                (clk),
     .rst_n              (rst_n),
-    .state              (state),
+    .state              (state_to_acc),
     .mul_out            (mul_out),
     .bn_en              (bn_en),
     .acc_cnt            (acc_cnt),
@@ -250,7 +262,7 @@ multiplier multiplier_0 (
     .pw_1_done          (pw_1_done),
     .dw_done            (dw_done),
     .pw_2_done          (pw_2_done),
-    .mul_in             (mul_in),
+    .mul_in             (mul_in),     
     .mul_weight         (mul_weight),
     .mul_out            (mul_out)
 );
@@ -273,8 +285,10 @@ BN_RELU BN_RELU_0 (
     .bn_cnt             (bn_cnt),
     .bn_relu_out        (bn_relu_out), 
     .save_valid         (save_valid),
+    .skip_valid         (skip_valid),
     .pw_1_bn_relu_done  (pw_1_bn_relu_done),
-    .dw_bn_relu_done    (dw_bn_relu_done)
+    .dw_bn_relu_done    (dw_bn_relu_done),
+    .pw_2_bn_done        (pw_2_bn_done)
 );
 
     
