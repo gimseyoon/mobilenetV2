@@ -15,7 +15,6 @@ module mobilenetV2 #(
     input clk,
     input rst_n,
     input start,
-    output signed [IO_WIDTH * PIXEL - 1 : 0] bn_relu_out,
     output [13:0] dw_bn_relu_out
 
 );
@@ -62,7 +61,7 @@ module mobilenetV2 #(
 
 //////////////////////////////////////////////////
 // BN_RELU
-    //wire signed [IO_WIDTH * PIXEL - 1 : 0] bn_relu_out;
+    wire signed [IO_WIDTH * PIXEL - 1 : 0] bn_relu_out;
     wire [3:0] bn_cnt;
     wire pw_1_bn_relu_done;
     wire dw_bn_relu_done;
