@@ -13,11 +13,12 @@ module enable_counter #(
     input                       clk,
     input                       rst_n,
     input         [2:0]         state,
-    input         [3:0]         bn_cnt,
     input         [14:0]        glbl_cnt,
-    input  [ADDR_CHANNEL-1:0]   acc_cnt,
     input                       save_valid,
-
+    input                       result_save_valid,
+    input                       pw_1_read_done,
+    input                       dw_read_done,
+    input                       pw_2_read_done,
     // BRAM 0
     output                      ena_0,
     output                      wea_0,
@@ -65,8 +66,8 @@ localparam [6:0]  REPEAT  = 7'd64;     // total pulses
 ///////////////////////////////////////////////////////
 assign ena_1 = ((state == PW_1) || (state == DW)) && save_valid;
 assign wea_1 = ((state == PW_1) || (state == DW)) && save_valid;
-assign ena_0 = (state == PW_2) && save_valid;
-assign wea_0 = (state == PW_2) && save_valid;
+assign ena_0 = (state == PW_2) && result_save_valid;
+assign wea_0 = (state == PW_2) && result_save_valid;
 
 ///////////////////////////////////////////////////////
 // Registers for pulse generator
@@ -135,12 +136,12 @@ always @(posedge clk or negedge rst_n) begin
             ///////////////////////////////////////////////////////
             PW_1: begin
                 // BRAM_A read + W0 enable
-                if (glbl_cnt >= 15'd24577) begin
-                    enb_0  <= 1'b0;
-                    ena_w0 <= 1'b0;
+                if (pw_1_read_done) begin
+                    enb_0  <= 0;
+                    ena_w0 <= 0;
                 end else begin
-                    enb_0  <= 1'b1;
-                    ena_w0 <= 1'b1;
+                    enb_0  <= 1;
+                    ena_w0 <= 1;
                 end
             end
 
@@ -149,12 +150,13 @@ always @(posedge clk or negedge rst_n) begin
             ///////////////////////////////////////////////////////
             DW: begin
                 // BRAM_B read + W1 enable
-                if (glbl_cnt >= 15'd5838) begin
-                    enb_1  <= 1'b0;
-                    ena_w1 <= 1'b0;
-                end else begin
-                    enb_1  <= 1'b1;
-                    ena_w1 <= 1'b1;
+                if (dw_read_done) begin
+                    enb_1  <= 0;
+                    ena_w1 <= 0;
+                end
+                else begin
+                    enb_1  <= 1;
+                    ena_w1 <= 1;
                 end
             end
 
@@ -163,12 +165,12 @@ always @(posedge clk or negedge rst_n) begin
             ///////////////////////////////////////////////////////
             PW_2: begin
                 // BRAM_B read + W2 enable
-                if (glbl_cnt >= 15'd24577) begin
-                    enb_1  <= 1'b0;
-                    ena_w2 <= 1'b0;
+                if (pw_2_read_done) begin
+                    enb_1  <= 0;
+                    ena_w2 <= 0;
                 end else begin
-                    enb_1  <= 1'b1;
-                    ena_w2 <= 1'b1;
+                    enb_1  <= 1;
+                    ena_w2 <= 1;
                 end
 
                 // Two-clock pulses on enb_0, every 384 cycles, 64 times, starting at 473
@@ -194,7 +196,10 @@ always @(posedge clk or negedge rst_n) begin
                         phase <= phase + 1'b1;
                     end
                 end
+            
             end
+            
+
 
             ///////////////////////////////////////////////////////
             // default

@@ -57,18 +57,24 @@ module mobilenetV2 #(
     wire dw_done;
     wire pw_2_valid;
     wire pw_2_done;
-    wire [ADDR_CHANNEL -1 :0] acc_cnt;
 
 //////////////////////////////////////////////////
 // BN_RELU
     wire signed [IO_WIDTH * PIXEL - 1 : 0] bn_relu_out;
-    wire [3:0] bn_cnt;
     wire pw_1_bn_relu_done;
     wire dw_bn_relu_done;
     wire pw_2_bn_done;
     wire layer_done;
     wire save_valid;
     wire skip_valid;
+    
+//////////////////////////////////////////////////
+// SK
+    wire signed [IO_WIDTH * PIXEL - 1 : 0] sk_in_1;
+    wire signed [IO_WIDTH * PIXEL - 1 : 0] sk_in_2;
+    wire signed [IO_WIDTH * PIXEL - 1 : 0] result;
+    wire result_save_valid;
+    
 //////////////////////////////////////////////////
 // bram_0
     wire                                        ena_0;
@@ -130,35 +136,34 @@ module mobilenetV2 #(
     endgenerate
     
 //////////////////////////////////////////////////
+// sk_in_1, sk_in_2    
+    assign sk_in_1 = (skip_valid) ? doutb_0 : 0;
+    assign sk_in_2 = (skip_valid) ? bn_relu_out : 0;
+    
+//////////////////////////////////////////////////
 // decide multiplier input
-    always@(*) begin
-        case(state)
-            IDLE: begin
-                mul_in = 0;
-                mul_weight = 0;
-            end
-            PW_1: begin
-                mul_in = doutb_0;
-                mul_weight = douta_w0;
-            end
+always @(posedge clk or negedge rst_n) begin
+    if(!rst_n) begin
+        mul_in <= 0;
+    end
+    else begin
+        case (state)
+          PW_1: begin mul_in <= doutb_0; mul_weight <= douta_w0; end
+          DW  : begin mul_in <= doutb_1; mul_weight <= douta_w1; end
+          PW_2: begin mul_in <= doutb_1; mul_weight <= douta_w2; end
+          default: begin mul_in <= 0; mul_weight <= 0; end
+        endcase 
+    end
 
-            DW: begin
-                mul_in = doutb_1;
-                mul_weight = douta_w1;
-            end
-            
-            PW_2: begin
-                mul_in = doutb_1;
-                mul_weight = douta_w2;
-            end
-            default: begin
-                mul_in = 0;
-                mul_weight = 0;
-            end
-        endcase
-    end    
+end 
 
+/////////////////////////////////////////////////////// 
+// Data muxing for BRAM write data
+///////////////////////////////////////////////////////
 
+    assign dina_0 = ( state==PW_2 && result_save_valid) ? result : 0;
+    assign dina_1 = ( (state==PW_1 || state==DW) && save_valid) ? bn_relu_out : 0; 
+    
 //////////////////////////////////////////////////
 // Instantiate FSM
 FSM FSM_0 (
@@ -183,26 +188,22 @@ glbl_ctrl glbl_ctrl_0 (
     .clk                (clk),
     .rst_n              (rst_n),
     .state              (state_to_glbl),
-    .bn_cnt             (bn_cnt),
     .save_valid         (save_valid),
     .skip_valid         (skip_valid),
     .acc_out            (acc_out),
-    .acc_cnt            (acc_cnt),
-    .bn_relu_out        (bn_relu_out), 
     .pw_1_done          (pw_1_done),
+    .result_save_valid  (result_save_valid),
     
 // BRAM A
     .ena_0              (ena_0),
     .wea_0              (wea_0),
     .addra_0            (addra_0),
-    .dina_0             (dina_0),
     .enb_0              (enb_0),
     .addrb_0            (addrb_0),
 // BRAM B
     .ena_1              (ena_1),
     .wea_1              (wea_1),
-    .addra_1            (addra_1),
-    .dina_1             (dina_1),    
+    .addra_1            (addra_1),  
     .enb_1              (enb_1),
     .addrb_1            (addrb_1),
     
@@ -243,7 +244,6 @@ accumulator accumulator_0 (
     .state              (state_to_acc),
     .mul_out            (mul_out),
     .bn_en              (bn_en),
-    .acc_cnt            (acc_cnt),
     .pw_1_valid         (pw_1_valid),
     .pw_1_done          (pw_1_done),
     .dw_valid           (dw_valid),
@@ -281,7 +281,6 @@ BN_RELU BN_RELU_0 (
     .bias               (douta_bias_0),
     .std                (douta_std_0),
     .acc_out            (acc_out), 
-    .bn_cnt             (bn_cnt),
     .bn_relu_out        (bn_relu_out), 
     .save_valid         (save_valid),
     .skip_valid         (skip_valid),
@@ -290,6 +289,17 @@ BN_RELU BN_RELU_0 (
     .pw_2_bn_done        (pw_2_bn_done)
 );
 
+//////////////////////////////////////////////////
+// Instantiate SKIP_CONNECTION
+SK SK_0(
+    .clk(clk),
+    .rst_n(rst_n),
+    .skip_valid(skip_valid),
+    .in_1(sk_in_1),
+    .in_2(sk_in_2),
+    .result(result),
+    .result_save_valid(result_save_valid)
+    );
     
 //////////////////////////////////////////////////
 // BRAM (INPUT, OUTPUT, WEIGHT)

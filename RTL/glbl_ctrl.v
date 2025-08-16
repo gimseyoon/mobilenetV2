@@ -15,33 +15,31 @@ module glbl_ctrl #(
     input                                   clk,
     input                                   rst_n,
     input           [2:0]                   state,
-    input           [3:0]                   bn_cnt,             // 0~13
     input                                   save_valid,
     input                                   skip_valid,
     input   signed  [IO_WIDTH*PIXEL-1:0]    acc_out,
-    input           [ADDR_CHANNEL-1:0]      acc_cnt,
-    input   signed  [IO_WIDTH*PIXEL-1:0]    bn_relu_out,        // [3528-1 : 0]
     input                                   pw_1_done,
+    input                                   result_save_valid,
 
     /////////////////////////////////////////////////////// 
     // BRAM_A (input/output feature map)
     ///////////////////////////////////////////////////////
     output                                  ena_0,
     output                                  wea_0,
-    output          [INPUT_CHANNEL-1:0]     addra_0,
-    output  reg     signed [IO_WIDTH*PIXEL-1:0] dina_0,
+    output             [INPUT_CHANNEL-1:0]  addra_0,
+    output reg signed [IO_WIDTH*PIXEL-1:0]  dina_0,
     output                                  enb_0,
-    output          [INPUT_CHANNEL-1:0]     addrb_0,
+    output             [INPUT_CHANNEL-1:0]  addrb_0,
 
     /////////////////////////////////////////////////////// 
     // BRAM_B (intermediate feature map)
     ///////////////////////////////////////////////////////
     output                                  ena_1,
     output                                  wea_1,
-    output          [ADDR_CHANNEL-1:0]      addra_1,
-    output  reg     signed [IO_WIDTH*PIXEL-1:0] dina_1,
+    output              [ADDR_CHANNEL-1:0]  addra_1,
+    output reg signed [IO_WIDTH*PIXEL-1:0]  dina_1,
     output                                  enb_1,
-    output          [ADDR_CHANNEL-1:0]      addrb_1,
+    output              [ADDR_CHANNEL-1:0]  addrb_1,
 
     /////////////////////////////////////////////////////// 
     // Weights BRAMs
@@ -81,28 +79,14 @@ localparam IDLE     = 3'b000,
 /////////////////////////////////////////////////////// 
 // Global counter (0..32767)
 ///////////////////////////////////////////////////////
+
 reg [14:0] glbl_cnt;
 
-/////////////////////////////////////////////////////// 
-// Data muxing for BRAM write data
-///////////////////////////////////////////////////////
-always @* begin
-    // ±âº»°ª
-    dina_0 = {IO_WIDTH*PIXEL{1'b0}};
-    dina_1 = {IO_WIDTH*PIXEL{1'b0}};
+wire pw_1_read_done;
+wire dw_read_done;
+wire pw_2_read_done;
 
-    case (state)
-        PW_1, DW: begin
-            if (save_valid) dina_1 = bn_relu_out;
-        end
-        PW_2: begin
-            if (skip_valid) dina_0 = bn_relu_out;
-        end
-        default: begin
-            // keep zeros
-        end
-    endcase
-end
+
 
 /////////////////////////////////////////////////////// 
 // Global counter run window
@@ -125,15 +109,17 @@ addr_counter addr_counter_0 (
     .clk            (clk),
     .rst_n          (rst_n),
     .state          (state),
-    .bn_cnt         (bn_cnt),
     .glbl_cnt       (glbl_cnt),
-    .acc_cnt        (acc_cnt),
     .save_valid     (save_valid),
     .skip_valid     (skip_valid),
 
     .enb_0          (enb_0),
     .enb_1          (enb_1),
 
+    .pw_1_read_done (pw_1_read_done),
+    .dw_read_done (dw_read_done),
+    .pw_2_read_done (pw_2_read_done),
+    
     .addra_0        (addra_0),
     .addrb_0        (addrb_0),
     .addra_1        (addra_1),
@@ -151,30 +137,32 @@ addr_counter addr_counter_0 (
 // enable_counter
 ///////////////////////////////////////////////////////
 enable_counter enable_counter_0 (
-    .clk            (clk),
-    .rst_n          (rst_n),
-    .state          (state),
-    .bn_cnt         (bn_cnt),
-    .glbl_cnt       (glbl_cnt),
-    .acc_cnt        (acc_cnt),
-    .save_valid     (save_valid),
+    .clk                (clk),
+    .rst_n              (rst_n),
+    .state              (state),
+    .glbl_cnt           (glbl_cnt),
+    .save_valid         (save_valid),
+    .result_save_valid  (result_save_valid),
+    .pw_1_read_done     (pw_1_read_done),
+    .dw_read_done       (dw_read_done),
+    .pw_2_read_done     (pw_2_read_done),
 
-    .ena_0          (ena_0),
-    .wea_0          (wea_0),
-    .enb_0          (enb_0),
+    .ena_0              (ena_0),
+    .wea_0              (wea_0),
+    .enb_0              (enb_0),
 
-    .ena_1          (ena_1),
-    .wea_1          (wea_1),
-    .enb_1          (enb_1),
+    .ena_1              (ena_1),
+    .wea_1              (wea_1),
+    .enb_1              (enb_1),
 
-    .ena_w0         (ena_w0),
-    .ena_w1         (ena_w1),
-    .ena_w2         (ena_w2),
+    .ena_w0             (ena_w0),
+    .ena_w1             (ena_w1),
+    .ena_w2             (ena_w2),
 
-    .ena_bias_0     (ena_bias_0),
-    .ena_mean_0     (ena_mean_0),
-    .ena_std_0      (ena_std_0),
-    .ena_weight_0   (ena_weight_0)
+    .ena_bias_0         (ena_bias_0),
+    .ena_mean_0         (ena_mean_0),
+    .ena_std_0          (ena_std_0),
+    .ena_weight_0       (ena_weight_0)
 );
 
 endmodule

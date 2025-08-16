@@ -15,7 +15,6 @@ module accumulator #(
     input               [2:0]                   state,
     input   signed      [IO_WIDTH*PIXEL-1:0]    mul_out,       // [3528-1:0]
     output  reg                                 bn_en,
-    output  reg         [ADDR_CHANNEL-1:0]      acc_cnt,
     output  reg                                 pw_1_valid,
     output  reg                                 pw_1_done,
     output  reg                                 dw_valid,
@@ -42,8 +41,9 @@ localparam IDLE     = 3'b000,
 ///////////////////////////////////////////////////////
 reg  [ADDR_CHANNEL-1:0]            channel_num;
 reg  [4:0]                         bn_en_cnt;
+reg  [ADDR_CHANNEL-1:0]            acc_cnt;
 reg  signed [IO_WIDTH-1:0]         acc_out_reg [0:PIXEL-1];
-reg  [7:0]                         state_delay;
+reg  [8:0]                         state_delay;
 wire                               pw_1_en;
 wire                               dw_en;
 wire                               pw_2_en;
@@ -52,9 +52,9 @@ wire signed [IO_WIDTH-1:0]         mul_out_reg [0:PIXEL-1];
 /////////////////////////////////////////////////////// 
 // Enables from state_delay
 ///////////////////////////////////////////////////////
-assign pw_1_en = (state == PW_1) ? state_delay[7] : 1'b0;
-assign dw_en   = (state == DW  ) ? state_delay[5] : 1'b0;
-assign pw_2_en = (state == PW_2) ? state_delay[7] : 1'b0;
+assign pw_1_en = (state == PW_1) ? state_delay[8] : 1'b0;
+assign dw_en   = (state == DW  ) ? state_delay[6] : 1'b0;
+assign pw_2_en = (state == PW_2) ? state_delay[8] : 1'b0;
 
 /////////////////////////////////////////////////////// 
 // state_delay (BRAM read wait)
@@ -63,6 +63,7 @@ always @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
         state_delay <= 8'd0;
     end else begin
+        state_delay[8] <= state_delay[7];
         state_delay[7] <= state_delay[6];
         state_delay[6] <= state_delay[5];
         state_delay[5] <= state_delay[4];
@@ -137,7 +138,7 @@ always @(posedge clk or negedge rst_n) begin
 
                 if (pw_1_en) begin
                     acc_cnt     <= (acc_cnt == 9'd63) ? 0 : acc_cnt + 1'b1;
-                    pw_1_valid  <= (acc_cnt == 9'd62);
+                    pw_1_valid  <= (channel_num != 9'd511) ? (acc_cnt == 9'd62) : 0;
                     pw_1_done   <= (acc_cnt == 9'd62) && (channel_num == 9'd383);
 
                     if (pw_1_valid) begin

@@ -22,7 +22,6 @@ module BN_RELU #(
     input   signed  [31:0]                  std,
     input   signed  [IO_WIDTH*PIXEL-1:0]    acc_out,        // [3528-1 : 0]
     output  signed  [IO_WIDTH*PIXEL-1:0]    bn_relu_out,    // [3528-1 : 0]
-    output  reg      [4:0]                  bn_cnt,         // 0~13
     output  reg                             save_valid,
     output  reg                             skip_valid,
     output  reg                             pw_1_bn_relu_done,
@@ -45,7 +44,8 @@ localparam IDLE     = 3'b000,
 /////////////////////////////////////////////////////// 
 // Registers / Wires
 ///////////////////////////////////////////////////////
-reg          [4:0]                  bn_save_cnt;         // 0~27
+reg          [4:0]                  bn_cnt;             // 0~13
+reg          [4:0]                  bn_save_cnt;        // 0~27
 reg          [ADDR_CHANNEL-1:0]     bn_channel_num;
 reg   signed [IO_WIDTH-1:0]         acc_out_reg       [0:PIXEL-1];
 wire  signed [IO_WIDTH-1:0]         acc_selected      [0:6];
