@@ -29,13 +29,24 @@ module mobilenetV2 #(
                PW_2         = 3'b101,
                PW_2_RST     = 3'b110,
                EXPORT       = 3'b111;
+              
+    localparam READY    = 2'b00,
+               LAYER_8  = 2'b01,
+               LAYER_9  = 2'b10,
+               LAYER_10 = 2'b11;
+               
+/////////////////////////////////////////////////////////////
 
+    reg new_start;
+    
 /////////////////////////////////////////////////////////////
 // FSM
     wire [2:0] state;
     (* KEEP="TRUE", DONT_TOUCH="TRUE" *) reg [2:0] state_to_acc;
     (* KEEP="TRUE", DONT_TOUCH="TRUE" *) reg [2:0] state_to_glbl;
     (* KEEP="TRUE", DONT_TOUCH="TRUE" *) reg [2:0] state_to_mux; // mul_in_sel/mul_weight_sel¿ë
+    
+    wire[1:0] layer_state;
     
     always @(posedge clk) begin
         state_to_acc  <= state;
@@ -64,7 +75,6 @@ module mobilenetV2 #(
     wire pw_1_bn_relu_done;
     wire dw_bn_relu_done;
     wire pw_2_bn_done;
-    wire layer_done;
     wire save_valid;
     wire skip_valid;
     
@@ -74,6 +84,7 @@ module mobilenetV2 #(
     wire signed [IO_WIDTH * PIXEL - 1 : 0] sk_in_2;
     wire signed [IO_WIDTH * PIXEL - 1 : 0] result;
     wire result_save_valid;
+    wire skip_done;
     
 //////////////////////////////////////////////////
 // bram_0
@@ -136,6 +147,23 @@ module mobilenetV2 #(
     endgenerate
     
 //////////////////////////////////////////////////
+// new_start
+/*
+    always@(posedge clk or negedge rst_n) begin
+        if(!rst_n) begin
+            new_start <= 0;
+        end
+        else begin
+            if(skip_done) begin
+                new_start <= 1;
+            end
+            else begin
+                new_start <= 0;
+            end
+        end // rst_n
+    end //always
+ */ 
+//////////////////////////////////////////////////
 // sk_in_1, sk_in_2    
     assign sk_in_1 = (skip_valid) ? doutb_0 : 0;
     assign sk_in_2 = (skip_valid) ? bn_relu_out : 0;
@@ -170,14 +198,12 @@ FSM FSM_0 (
     .clk                (clk),
     .rst_n              (rst_n),
     .start              (start),
-    .pw_1_done          (pw_1_done),
+    .new_start          (new_start),
     .pw_1_bn_relu_done  (pw_1_bn_relu_done),
-    .dw_done            (dw_done),
     .dw_bn_relu_done    (dw_bn_relu_done),
-    .pw_2_done          (pw_2_done),
-    .pw_2_bn_done       (pw_2_bn_done),
-    .layer_done         (layer_done),  
-    .state              (state)
+    .skip_done          (skip_done),  
+    .state              (state),
+    .layer_state        (layer_state)
 );
     
 
@@ -298,7 +324,8 @@ SK SK_0(
     .in_1(sk_in_1),
     .in_2(sk_in_2),
     .result(result),
-    .result_save_valid(result_save_valid)
+    .result_save_valid(result_save_valid),
+    .skip_done(skip_done)
     );
     
 //////////////////////////////////////////////////

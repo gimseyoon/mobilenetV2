@@ -329,9 +329,9 @@ always @(posedge clk or negedge rst_n) begin
                     addra_weight_0 <= addra_weight_0 + 1'b1;
                 end
 
-                // addra_0++ on enb_0 falling edge (64 times total)
+                // addrb_0++ on enb_0 falling edge (64 times total)
                 if (enb_0_q && !enb_0)
-                    addra_0 <= (addra_0 == 6'd63) ? {INPUT_CHANNEL{1'b0}} : addra_0 + 1'b1;
+                    addrb_0 <= (addrb_0 == 6'd63) ? 0 : addrb_0 + 1;
             end
 
             ///////////////////////////////////////////////////////

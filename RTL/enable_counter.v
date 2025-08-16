@@ -56,7 +56,7 @@ localparam IDLE     = 3'b000,
 ///////////////////////////////////////////////////////
 // Pulse generator params for enb_0 during PW_2
 ///////////////////////////////////////////////////////
-localparam [14:0] START   = 15'd473;   // first trigger
+localparam [14:0] START   = 15'd487;   // first trigger
 localparam [8:0]  PERIOD  = 9'd384;    // interval
 localparam [8:0]  HIGHLEN = 9'd2;      // high length (2 clocks)
 localparam [6:0]  REPEAT  = 7'd64;     // total pulses
@@ -181,7 +181,8 @@ always @(posedge clk or negedge rst_n) begin
                         phase   <= 9'd0;
                         rep_cnt <= 6'd0;
                     end
-                end else begin
+                end 
+                else begin
                     enb_0 <= (phase < HIGHLEN);
 
                     if (phase == (PERIOD - 1)) begin
