@@ -144,11 +144,11 @@ always @(posedge clk or negedge rst_n) begin
                     addra_1 <= addra_1 + 1'b1;
             
                 // -------------------------------------------------
-                // BN params (PW_1): base Æ®¸®°Å ÈÄ ¸Å 64Å¬·° Áõ°¡
-                //   - mean  : glbl_cnt == 105 -> ´ÙÀ½ clk¿¡ 1Áõ°¡, ÀÌÈÄ ¸Å 64Å¬·°
-                //   - std   : glbl_cnt == 116 -> ´ÙÀ½ clk¿¡ 1Áõ°¡, ÀÌÈÄ ¸Å 64Å¬·°
-                //   - weight: glbl_cnt == 144 -> ´ÙÀ½ clk¿¡ 1Áõ°¡, ÀÌÈÄ ¸Å 64Å¬·°
-                //   - bias  : glbl_cnt == 152 -> ´ÙÀ½ clk¿¡ 1Áõ°¡, ÀÌÈÄ ¸Å 64Å¬·°
+                // BN params (PW_1): base íŠ¸ë¦¬ê±° í›„ ë§¤ 64í´ëŸ­ ì¦ê°€
+                //   - mean  : glbl_cnt == 105 -> ë‹¤ìŒ clkì— 1ì¦ê°€, ì´í›„ ë§¤ 64í´ëŸ­
+                //   - std   : glbl_cnt == 116 -> ë‹¤ìŒ clkì— 1ì¦ê°€, ì´í›„ ë§¤ 64í´ëŸ­
+                //   - weight: glbl_cnt == 144 -> ë‹¤ìŒ clkì— 1ì¦ê°€, ì´í›„ ë§¤ 64í´ëŸ­
+                //   - bias  : glbl_cnt == 152 -> ë‹¤ìŒ clkì— 1ì¦ê°€, ì´í›„ ë§¤ 64í´ëŸ­
                 // -------------------------------------------------
                 // mean
                 if (glbl_cnt == 15'd106) begin
@@ -339,7 +339,7 @@ always @(posedge clk or negedge rst_n) begin
                                                                 
                 // PW2 uses skip_valid
                 if (skip_valid) begin
-                    addra_1        <= addra_1 + 1'b1;
+                    addra_0        <= addra_0 + 1'b1;
                     addra_bias_0   <= addra_bias_0   + 1'b1;
                     addra_mean_0   <= addra_mean_0   + 1'b1;
                     addra_std_0    <= addra_std_0    + 1'b1;
