@@ -52,18 +52,16 @@ endfunction
 // Register outputs (clear when *_done pulses)
 ///////////////////////////////////////////////////////
 integer k;
+
 always @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
-        for (k = 0; k < PIXEL; k = k + 1) mul_out_reg[k] <= 0;
+        for (k = 0; k < PIXEL; k = k + 1)
+            mul_out_reg[k] <= 0;
     end else begin
-        if (pw_1_done || dw_done || pw_2_done) begin
-            for (k = 0; k < PIXEL; k = k + 1) mul_out_reg[k] <= 0;
-        end else begin
-            for (k = 0; k < PIXEL; k = k + 1) mul_out_reg[k] <= round_shift_signed18(mul_out_w[k]);
-        end
+        for (k = 0; k < PIXEL; k = k + 1)
+            mul_out_reg[k] <= round_shift_signed18(mul_out_w[k]);
     end
 end
-
 ///////////////////////////////////////////////////////
 // Pack register array -> bus
 ///////////////////////////////////////////////////////

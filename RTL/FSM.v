@@ -69,7 +69,7 @@ always @(*) begin
 end
 
 always @(*) begin
-    next_layer_state = state;
+    next_layer_state = layer_state;
     case (layer_state)
         READY:       if (start || new_start)    next_layer_state = LAYER_8;
         LAYER_8:     if (new_start)             next_layer_state = LAYER_9;

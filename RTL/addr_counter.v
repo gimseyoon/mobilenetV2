@@ -124,7 +124,12 @@ always @(posedge clk or negedge rst_n) begin
                 // BRAM_A, BRAM_W_0
                 if (enb_0) begin
                     addrb_0  <= (addrb_0 >= 9'd63) ? {INPUT_CHANNEL{1'b0}} : addrb_0 + 1'b1;
-                    addra_w0 <= addra_w0 + 1'b1;
+                    if(addra_w0 == 24575) begin
+                        addra_w0 <= 0;
+                    end
+                    else begin
+                        addra_w0 <= addra_w0 + 1'b1;
+                    end
                 end
                 else begin
                     addrb_0  <= {INPUT_CHANNEL{1'b0}};
@@ -220,8 +225,14 @@ always @(posedge clk or negedge rst_n) begin
                 // BRAM_B, BRAM_W1
                 if (enb_1) begin
                         if ((dw_cnt <= 5'd7) || (dw_cnt == 5'd28)) begin
-                            addra_w1 <= addra_w1 + 1'b1;
+                            if(addra_w1 == 3455) begin
+                                addra_w1 <= 0;
+                            end
+                            else begin
+                                addra_w1 <= addra_w1 + 1'b1;
+                            end
                         end
+                        
                         if (dw_cnt == 5'd28) begin
                             dw_cnt     <= 4'd0;
                             addrb_1 <= (addrb_1 == 9'd383) ? {ADDR_CHANNEL{1'b0}} : addrb_1 + 1'b1;
@@ -290,6 +301,7 @@ always @(posedge clk or negedge rst_n) begin
             // DW_RST
             ///////////////////////////////////////////////////////
             DW_RST: begin
+                addrb_0        <= {INPUT_CHANNEL{1'b0}};
                 addra_1        <= {ADDR_CHANNEL{1'b0}};
                 addra_bias_0   <= PW_2_OFFSET;
                 addra_mean_0   <= PW_2_OFFSET;
@@ -299,7 +311,7 @@ always @(posedge clk or negedge rst_n) begin
                 mean_run<=1'b0; std_run<=1'b0; weight_run<=1'b0; bias_run<=1'b0;
                 mean_phase<=6'd0; std_phase<=6'd0; weight_phase<=6'd0; bias_phase<=6'd0;
             end
-
+            
             ///////////////////////////////////////////////////////
             // PW_2
             ///////////////////////////////////////////////////////
@@ -307,7 +319,12 @@ always @(posedge clk or negedge rst_n) begin
                 // BRAM_B, BRAM_W2
                 if (enb_1) begin
                     addrb_1  <= (addrb_1 >= 9'd383) ? {ADDR_CHANNEL{1'b0}} : addrb_1 + 1'b1;
-                    addra_w2 <= addra_w2 + 1'b1;
+                    if(addra_w2 == 24575) begin 
+                        addra_w2 <= 0;
+                    end
+                    else begin
+                        addra_w2 <= addra_w2 + 1'b1;
+                    end
                 end 
                 else begin
                     addrb_1  <= {ADDR_CHANNEL{1'b0}};

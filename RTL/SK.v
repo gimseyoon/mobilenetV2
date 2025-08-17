@@ -88,8 +88,7 @@ always @(posedge clk or negedge rst_n) begin
             end
         end
         else begin
-            idx    <= 0;
-            sk_cnt <= 0;
+            idx <= 0;
         end
         
         if(sk_cnt == 64 && idx == 195) begin

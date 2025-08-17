@@ -85,14 +85,16 @@ always @(posedge clk or negedge rst_n) begin
         if (state == PW_1 || state == DW) begin
             if (bn_valid && bn_save_cnt == 5'd27) save_valid <= 1'b1;
             else                                  save_valid <= 1'b0;
-        end else begin
+        end 
+        else begin
             save_valid <= 1'b0;
         end
 
         if (state == PW_2) begin
             if (bn_valid && bn_save_cnt == 5'd27) skip_valid <= 1'b1;
             else                                  skip_valid <= 1'b0;
-        end else begin
+        end 
+        else begin
             skip_valid <= 1'b0;
         end
     end
@@ -107,10 +109,13 @@ generate
         always @(posedge clk or negedge rst_n) begin
             if (!rst_n) begin
                 acc_out_reg[i] <= {IO_WIDTH{1'b0}};
-            end else if (pw_1_valid || dw_valid || pw_2_valid) begin
-                acc_out_reg[i] <= acc_out[IO_WIDTH*(i+1)-1 : IO_WIDTH*i];
+            end 
+            else  begin
+                if (pw_1_valid || dw_valid || pw_2_valid) begin
+                    acc_out_reg[i] <= acc_out[IO_WIDTH*(i+1)-1 : IO_WIDTH*i];
+                end 
             end
-        end
+        end //always
     end
 endgenerate
 
@@ -130,8 +135,7 @@ endgenerate
 genvar k;
 generate
     for (k = 0; k < PIXEL; k = k + 1) begin : PACK_OUTPUT
-        assign bn_relu_out[IO_WIDTH*(k+1)-1 : IO_WIDTH*k]
-             = (save_valid || skip_valid) ? bn_relu_out_array[k] : {IO_WIDTH{1'b0}};
+        assign bn_relu_out[IO_WIDTH*(k+1)-1 : IO_WIDTH*k] = bn_relu_out_array[k];
     end
 endgenerate
 

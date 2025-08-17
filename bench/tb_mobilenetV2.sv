@@ -15,10 +15,9 @@ module tb_mobilenetV2 #(
     reg clk;
     reg rst_n;
     reg start;
-    reg [31:0] test_value_1 = 32'hFFFEF2F8; // 1111_1111_1111_1110_1111_0010_1111_1000 ->  110_1111_0010_1111_100
-    reg [17:0] test_value_2 = 18'b110_1110_0101_1111_000;
-    reg [17:0] test_value_3 = 18'b110_1111_0010_1111_100;
-    reg [19:0] test_value_4 = 20'hEF2F8; // 1110_1111_0010_1111_1000
+    wire [13:0] layer_8_result;
+
+
     
     
 /////////////////////////////////////////////////////////////////
@@ -35,12 +34,13 @@ module tb_mobilenetV2 #(
     ) dut (
         .clk(clk),
         .rst_n(rst_n),
-        .start(start)
+        .start(start),
+        .layer_8_result(layer_8_result)
     );
 
     // Clock generation
     initial clk = 0;
-    always #12.5 clk = ~clk;
+    always #1.6666667 clk = ~clk;
 
     // rst_n
     initial begin

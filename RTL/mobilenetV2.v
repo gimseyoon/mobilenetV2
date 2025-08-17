@@ -15,7 +15,7 @@ module mobilenetV2 #(
     input clk,
     input rst_n,
     input start,
-    output [13:0] dw_bn_relu_out
+    output [13:0] layer_8_result
 
 );
     
@@ -38,6 +38,7 @@ module mobilenetV2 #(
 /////////////////////////////////////////////////////////////
 
     reg new_start;
+    wire rst_n_sync;
     
 /////////////////////////////////////////////////////////////
 // FSM
@@ -142,7 +143,7 @@ module mobilenetV2 #(
     genvar j;
     generate
         for (j = 0; j < 14; j = j + 1) begin
-            assign dw_bn_relu_out[j] = bn_relu_out[(j * 18 * 14) + 17];
+            assign layer_8_result[j] = result[(j * 18 * 14) + 17];
         end
     endgenerate
     
@@ -189,14 +190,24 @@ end
 // Data muxing for BRAM write data
 ///////////////////////////////////////////////////////
 
-    assign dina_0 = ( state==PW_2 && result_save_valid) ? result : 0;
-    assign dina_1 = ( (state==PW_1 || state==DW) && save_valid) ? bn_relu_out : 0; 
+    assign dina_0 = result;
+    assign dina_1 = bn_relu_out; 
     
+//////////////////////////////////////////////////
+
+
+// Instantiate FSM
+reset_sync reset_sync_0(
+    .clk(clk),
+    .rst_n_async(rst_n),     // 보드에서 들어온 비동기 리셋(Active-Low)
+    .rst_n_sync(rst_n_sync)
+);
+
 //////////////////////////////////////////////////
 // Instantiate FSM
 FSM FSM_0 (
     .clk                (clk),
-    .rst_n              (rst_n),
+    .rst_n              (rst_n_sync),
     .start              (start),
     .new_start          (new_start),
     .pw_1_bn_relu_done  (pw_1_bn_relu_done),
@@ -212,7 +223,7 @@ FSM FSM_0 (
 
 glbl_ctrl glbl_ctrl_0 (
     .clk                (clk),
-    .rst_n              (rst_n),
+    .rst_n              (rst_n_sync),
     .state              (state_to_glbl),
     .save_valid         (save_valid),
     .skip_valid         (skip_valid),
@@ -266,7 +277,7 @@ glbl_ctrl glbl_ctrl_0 (
 // Instantiate accumulator
 accumulator accumulator_0 (
     .clk                (clk),
-    .rst_n              (rst_n),
+    .rst_n              (rst_n_sync),
     .state              (state_to_acc),
     .mul_out            (mul_out),
     .bn_en              (bn_en),
@@ -283,7 +294,7 @@ accumulator accumulator_0 (
 // Instantiate multiplier
 multiplier multiplier_0 (
     .clk                (clk),
-    .rst_n              (rst_n),
+    .rst_n              (rst_n_sync),
     .pw_1_done          (pw_1_done),
     .dw_done            (dw_done),
     .pw_2_done          (pw_2_done),
@@ -296,7 +307,7 @@ multiplier multiplier_0 (
 // Instantiate BN_RELU
 BN_RELU BN_RELU_0 (
     .clk                (clk),
-    .rst_n              (rst_n),
+    .rst_n              (rst_n_sync),
     .state              (state),
     .pw_1_valid         (pw_1_valid),
     .dw_valid           (dw_valid),
@@ -319,7 +330,7 @@ BN_RELU BN_RELU_0 (
 // Instantiate SKIP_CONNECTION
 SK SK_0(
     .clk(clk),
-    .rst_n(rst_n),
+    .rst_n(rst_n_sync),
     .skip_valid(skip_valid),
     .in_1(sk_in_1),
     .in_2(sk_in_2),
@@ -334,15 +345,15 @@ SK SK_0(
 // BRAM_A
 
 bram_A bram_A (
-  .clka(clk),    // input wire clka
-  .ena(ena_0),      // input wire ena
-  .wea(wea_0),      // input wire [0 : 0] wea
-  .addra(addra_0),  // input wire [5 : 0] addra
-  .dina(dina_0),    // input wire [3527 : 0] dina
-  .clkb(clk),    // input wire clkb
-  .enb(enb_0),      // input wire enb
-  .addrb(addrb_0),  // input wire [5 : 0] addrb
-  .doutb(doutb_0)  // output wire [3527 : 0] doutb
+  .clka                 (clk),    // input wire clka
+  .ena                  (ena_0),      // input wire ena
+  .wea                  (wea_0),      // input wire [0 : 0] wea
+  .addra                (addra_0),  // input wire [5 : 0] addra
+  .dina                 (dina_0),    // input wire [3527 : 0] dina
+  .clkb                 (clk),    // input wire clkb
+  .enb                  (enb_0),      // input wire enb
+  .addrb                (addrb_0),  // input wire [5 : 0] addrb
+  .doutb                (doutb_0)  // output wire [3527 : 0] doutb
 );
 // BRAM_B
 blk_mem_gen_1 bram_B (
