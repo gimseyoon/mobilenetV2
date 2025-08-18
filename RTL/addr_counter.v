@@ -18,6 +18,7 @@ module addr_counter #(
     input         [14:0]            glbl_cnt,
     input                           save_valid,
     input                           skip_valid,
+    input                           result_save_valid,
     input                           enb_0,
     input                           enb_1,
 
@@ -144,11 +145,11 @@ always @(posedge clk or negedge rst_n) begin
                     addra_1 <= addra_1 + 1'b1;
             
                 // -------------------------------------------------
-                // BN params (PW_1): base íŠ¸ë¦¬ê±° í›„ ë§¤ 64í´ëŸ­ ì¦ê°€
-                //   - mean  : glbl_cnt == 105 -> ë‹¤ìŒ clkì— 1ì¦ê°€, ì´í›„ ë§¤ 64í´ëŸ­
-                //   - std   : glbl_cnt == 116 -> ë‹¤ìŒ clkì— 1ì¦ê°€, ì´í›„ ë§¤ 64í´ëŸ­
-                //   - weight: glbl_cnt == 144 -> ë‹¤ìŒ clkì— 1ì¦ê°€, ì´í›„ ë§¤ 64í´ëŸ­
-                //   - bias  : glbl_cnt == 152 -> ë‹¤ìŒ clkì— 1ì¦ê°€, ì´í›„ ë§¤ 64í´ëŸ­
+                // BN params (PW_1): base ?Š¸ë¦¬ê±° ?›„ ë§? 64?´?Ÿ­ ì¦ê?
+                //   - mean  : glbl_cnt == 105 -> ?‹¤?Œ clk?— 1ì¦ê?, ?´?›„ ë§? 64?´?Ÿ­
+                //   - std   : glbl_cnt == 116 -> ?‹¤?Œ clk?— 1ì¦ê?, ?´?›„ ë§? 64?´?Ÿ­
+                //   - weight: glbl_cnt == 144 -> ?‹¤?Œ clk?— 1ì¦ê?, ?´?›„ ë§? 64?´?Ÿ­
+                //   - bias  : glbl_cnt == 152 -> ?‹¤?Œ clk?— 1ì¦ê?, ?´?›„ ë§? 64?´?Ÿ­
                 // -------------------------------------------------
                 // mean
                 if (glbl_cnt == 15'd106) begin
@@ -253,7 +254,7 @@ always @(posedge clk or negedge rst_n) begin
                     addra_1 <= addra_1 + 1'b1;  
 
                 // mean: base=35+1, every 15
-                if (glbl_cnt == 15'd49) begin
+                if (glbl_cnt == 15'd50) begin
                     addra_mean_0 <= addra_mean_0 + 1'b1; mean_run<=1'b1; mean_phase<=6'd0;
                 end else if (mean_run) begin
                     if (mean_phase == 6'd28) begin
@@ -264,7 +265,7 @@ always @(posedge clk or negedge rst_n) begin
                 end
 
                 // std: base=46, every 15
-                if (glbl_cnt == 15'd60) begin
+                if (glbl_cnt == 15'd61) begin
                     addra_std_0 <= addra_std_0 + 1'b1; std_run<=1'b1; std_phase<=4'd0;
                 end else if (std_run) begin
                     if (std_phase == 6'd28) begin
@@ -275,7 +276,7 @@ always @(posedge clk or negedge rst_n) begin
                 end
 
                 // weight: base=74, every 15
-                if (glbl_cnt == 15'd88) begin
+                if (glbl_cnt == 15'd89) begin
                     addra_weight_0 <= addra_weight_0 + 1'b1; weight_run<=1'b1; weight_phase<=4'd0;
                 end else if (weight_run) begin
                     if (weight_phase == 6'd28) begin
@@ -286,7 +287,7 @@ always @(posedge clk or negedge rst_n) begin
                 end
 
                 // bias: base=82, every 15
-                if (glbl_cnt == 15'd96) begin
+                if (glbl_cnt == 15'd97) begin
                     addra_bias_0 <= addra_bias_0 + 1'b1; bias_run<=1'b1; bias_phase<=4'd0;
                 end else if (bias_run) begin
                     if (bias_phase == 6'd28) begin
@@ -338,7 +339,7 @@ always @(posedge clk or negedge rst_n) begin
 
                                                                 
                 // PW2 uses skip_valid
-                if (skip_valid) begin
+                if (result_save_valid) begin
                     addra_0        <= addra_0 + 1'b1;
                     addra_bias_0   <= addra_bias_0   + 1'b1;
                     addra_mean_0   <= addra_mean_0   + 1'b1;

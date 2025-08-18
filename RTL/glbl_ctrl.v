@@ -106,31 +106,31 @@ end
 // addr_counter
 ///////////////////////////////////////////////////////
 addr_counter addr_counter_0 (
-    .clk            (clk),
-    .rst_n          (rst_n),
-    .state          (state),
-    .glbl_cnt       (glbl_cnt),
-    .save_valid     (save_valid),
-    .skip_valid     (skip_valid),
+    .clk                (clk),
+    .rst_n              (rst_n),
+    .state              (state),
+    .glbl_cnt           (glbl_cnt),
+    .save_valid         (save_valid),
+    .skip_valid         (skip_valid),
+    .result_save_valid (result_save_valid),
+    .enb_0              (enb_0),
+    .enb_1              (enb_1),
 
-    .enb_0          (enb_0),
-    .enb_1          (enb_1),
-
-    .pw_1_read_done (pw_1_read_done),
-    .dw_read_done (dw_read_done),
-    .pw_2_read_done (pw_2_read_done),
+    .pw_1_read_done     (pw_1_read_done),
+    .dw_read_done       (dw_read_done),
+    .pw_2_read_done     (pw_2_read_done),
     
-    .addra_0        (addra_0),
-    .addrb_0        (addrb_0),
-    .addra_1        (addra_1),
-    .addrb_1        (addrb_1),
-    .addra_w0       (addra_w0),
-    .addra_w1       (addra_w1),
-    .addra_w2       (addra_w2),
-    .addra_bias_0   (addra_bias_0),
-    .addra_mean_0   (addra_mean_0),
-    .addra_std_0    (addra_std_0),
-    .addra_weight_0 (addra_weight_0)
+    .addra_0            (addra_0),
+    .addrb_0            (addrb_0),
+    .addra_1            (addra_1),
+    .addrb_1            (addrb_1),
+    .addra_w0           (addra_w0),
+    .addra_w1           (addra_w1),
+    .addra_w2           (addra_w2),
+    .addra_bias_0       (addra_bias_0),
+    .addra_mean_0       (addra_mean_0),
+    .addra_std_0        (addra_std_0),
+    .addra_weight_0     (addra_weight_0)
 );
 
 /////////////////////////////////////////////////////// 

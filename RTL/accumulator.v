@@ -43,17 +43,17 @@ reg  [ADDR_CHANNEL-1:0]            channel_num;
 reg  [4:0]                         bn_en_cnt;
 reg  [ADDR_CHANNEL-1:0]            acc_cnt;
 reg  signed [IO_WIDTH-1:0]         acc_out_reg [0:PIXEL-1];
-reg  [8:0]                         state_delay;
+reg  [9:0]                         state_delay;
 wire                               pw_1_en;
 wire                               dw_en;
 wire                               pw_2_en;
-wire signed [IO_WIDTH-1:0]         mul_out_reg [0:PIXEL-1];
+reg  signed [IO_WIDTH-1:0]         mul_out_reg [0:PIXEL-1];
 
 /////////////////////////////////////////////////////// 
 // Enables from state_delay
 ///////////////////////////////////////////////////////
-assign pw_1_en = (state == PW_1) ? state_delay[8] : 1'b0;
-assign dw_en   = (state == DW  ) ? state_delay[6] : 1'b0;
+assign pw_1_en = (state == PW_1) ? state_delay[9] : 1'b0;
+assign dw_en   = (state == DW  ) ? state_delay[7] : 1'b0;
 assign pw_2_en = (state == PW_2) ? state_delay[8] : 1'b0;
 
 /////////////////////////////////////////////////////// 
@@ -63,6 +63,7 @@ always @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
         state_delay <= 8'd0;
     end else begin
+        state_delay[9] <= state_delay[8];
         state_delay[8] <= state_delay[7];
         state_delay[7] <= state_delay[6];
         state_delay[6] <= state_delay[5];
@@ -81,13 +82,17 @@ end
 /////////////////////////////////////////////////////// 
 // Unpack mul_out -> mul_out_reg[PIXEL]
 ///////////////////////////////////////////////////////
-genvar j;
-generate
-    for (j = 0; j < PIXEL; j = j + 1) begin : UNPACK_MUL_OUT
-        assign mul_out_reg[j] = mul_out[IO_WIDTH*(j+1)-1 : IO_WIDTH*j];
-    end
-endgenerate
+integer k;
 
+always @(posedge clk or negedge rst_n) begin
+  if (!rst_n) begin
+    for (k = 0; k < PIXEL; k = k + 1)
+      mul_out_reg[k] <= 0;
+  end else begin
+    for (k = 0; k < PIXEL; k = k + 1)
+      mul_out_reg[k] <= mul_out[k*IO_WIDTH +: IO_WIDTH];
+  end
+end
 /////////////////////////////////////////////////////// 
 // Pack acc_out_reg[] -> acc_out
 ///////////////////////////////////////////////////////
@@ -139,7 +144,7 @@ always @(posedge clk or negedge rst_n) begin
                     pw_1_done   <= (acc_cnt == 9'd62) && (channel_num == 9'd383);
 
                     if (pw_1_valid) begin
-                        if      (channel_num == 9'd383) channel_num <= 11'd511;
+                        if       (channel_num == 9'd383) channel_num <= 11'd511;
                         else if (channel_num == 9'd511) channel_num <= channel_num;
                         else                             channel_num <= channel_num + 1'b1;
                     end
@@ -256,12 +261,13 @@ always @(posedge clk or negedge rst_n) begin
                         channel_num <= 0;
                     end
             end // DW
-
+            
+            
             PW_2: begin
 
                 for (k = 0; k < PIXEL; k = k + 1) begin
-                    if (acc_cnt >= 9'd383) acc_out_reg[k] <= mul_out_reg[k];                 // ?? ??? ????
-                    else                    acc_out_reg[k] <= acc_out_reg[k] + mul_out_reg[k]; // ????
+                    if (acc_cnt >= 9'd383)  acc_out_reg[k] <= mul_out_reg[k];            
+                    else                    acc_out_reg[k] <= acc_out_reg[k] + mul_out_reg[k];
                 end
 
                 if (pw_2_en) begin
@@ -275,7 +281,7 @@ always @(posedge clk or negedge rst_n) begin
                         else                              channel_num <= channel_num + 1'b1;
                     end
                 end else begin
-                    acc_cnt    <= 0;
+                    acc_cnt    <= 511;
                     pw_2_valid <= 0;
                     pw_2_done  <= 0;
                     channel_num <= 0;

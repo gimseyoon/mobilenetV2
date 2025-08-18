@@ -15,7 +15,8 @@ module mobilenetV2 #(
     input clk,
     input rst_n,
     input start,
-    output [13:0] layer_8_result
+    output reg result_save_valid_o,
+    output reg [13: 0] layer_8_result
 
 );
     
@@ -140,12 +141,15 @@ module mobilenetV2 #(
     
 ////////////////////////////////////////////////////////////
 
-    genvar j;
-    generate
+    integer j;
+    always@(posedge clk) begin
         for (j = 0; j < 14; j = j + 1) begin
-            assign layer_8_result[j] = result[(j * 18 * 14) + 17];
-        end
-    endgenerate
+            layer_8_result[j] <= result[(j * 18 * 14) + 17];
+        end  
+    end
+    always@(posedge clk) begin
+            result_save_valid_o <= result_save_valid;
+    end
     
 //////////////////////////////////////////////////
 // new_start
