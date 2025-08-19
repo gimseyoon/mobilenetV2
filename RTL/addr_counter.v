@@ -1,21 +1,21 @@
 `timescale 1ns / 1ps
 
 module addr_counter #(
-    parameter IO_WIDTH       = 18,
-    parameter ROW            = 14,
-    parameter COLUMN         = 14,
-    parameter PIXEL          = ROW * COLUMN,              // 196
-    parameter W_WIDTH        = 17,
-    parameter INPUT_CHANNEL  = 64,
-    parameter ADDR_PARAM     = 10,
-    parameter ADDR_CHANNEL   = $clog2(384),               // 9
-    parameter ADDR_WMEM      = $clog2(384 * 64),          // 15
-    parameter ADDR_W1_MEM    = $clog2(384 * 9)            // 12
+    parameter IO_WIDTH = 18,
+    parameter ROW = 14,
+    parameter COLUMN = 14,
+    parameter PIXEL = ROW * COLUMN,              // 14 * 14 = 196
+    parameter W_WIDTH = 17,
+    parameter INPUT_CHANNEL = 64,
+    parameter ADDR_PARAM = 10,
+    parameter ADDR_IN = $clog2(64),
+    parameter ADDR_CHANNEL  = $clog2(384),        // 9 (for CHANNEL = 384)
+    parameter ADDR_WMEM = $clog2(384 * 64),       // 15 (for 64*384 = 24576)
+    parameter ADDR_W1_MEM = $clog2(384 * 9)       // 12 (for 9*384 = 3456)
 )(
     input                           clk,
     input                           rst_n,
     input         [2:0]             state,
-    input         [14:0]            glbl_cnt,
     input                           save_valid,
     input                           skip_valid,
     input                           result_save_valid,
@@ -26,8 +26,8 @@ module addr_counter #(
     output reg                     dw_read_done,
     output reg                     pw_2_read_done,
     // BRAM 0
-    output reg    [INPUT_CHANNEL-1:0] addra_0,
-    output reg    [INPUT_CHANNEL-1:0] addrb_0,
+    output reg    [ADDR_IN-1:0]     addra_0,
+    output reg    [ADDR_IN-1:0]     addrb_0,
 
     // BRAM 1
     output reg    [ADDR_CHANNEL-1:0]  addra_1,
@@ -63,11 +63,26 @@ localparam [ADDR_PARAM-1:0] PW_2_OFFSET = 10'd768;
 ///////////////////////////////////////////////////////
 // Registers
 ///////////////////////////////////////////////////////
+reg [14:0]  cnt;
 reg         enb_0_q;
 reg  [4:0]  dw_cnt;
 reg         mean_run, std_run, weight_run, bias_run;
 reg  [5:0]  mean_phase, std_phase, weight_phase, bias_phase;
 
+
+/////////////////////////////////////////////////////// 
+// Global counter run window
+///////////////////////////////////////////////////////
+always @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+        cnt <= 15'd0;
+    end else begin
+        if (state == PW_1 || state == DW || state == PW_2)
+            cnt <= cnt + 15'd1;
+        else
+            cnt <= 15'd0;
+    end
+end
 ///////////////////////////////////////////////////////
 // Sequential: address generation
 ///////////////////////////////////////////////////////
@@ -76,18 +91,18 @@ always @(posedge clk or negedge rst_n) begin
         enb_0_q        <= 1'b0;
         dw_cnt            <= 5'd0;
 
-        addra_0        <= {INPUT_CHANNEL{1'b0}};
-        addrb_0        <= {INPUT_CHANNEL{1'b0}};
-        addra_1        <= {ADDR_CHANNEL{1'b0}};
-        addrb_1        <= {ADDR_CHANNEL{1'b0}};
-        addra_w0       <= {ADDR_WMEM{1'b0}};
-        addra_w1       <= {ADDR_W1_MEM{1'b0}};
-        addra_w2       <= {ADDR_WMEM{1'b0}};
-
-        addra_bias_0   <= {ADDR_PARAM{1'b0}};  // 1023
-        addra_mean_0   <= {ADDR_PARAM{1'b0}};
-        addra_std_0    <= {ADDR_PARAM{1'b0}};
-        addra_weight_0 <= {ADDR_PARAM{1'b0}};
+        addra_0        <= 0;
+        addrb_0        <= 0;
+        addra_1        <= 0;
+        addrb_1        <= 0;
+        addra_w0       <= 0;
+        addra_w1       <= 0;
+        addra_w2       <= 0;
+                          
+        addra_bias_0   <= 0;  // 1023
+        addra_mean_0   <= 0;
+        addra_std_0    <= 0;
+        addra_weight_0 <= 0;
 
         mean_run       <= 1'b0;  std_run   <= 1'b0;  weight_run <= 1'b0;  bias_run <= 1'b0;
         mean_phase     <= 6'd0;  std_phase <= 6'd0;  weight_phase<= 6'd0; bias_phase<= 6'd0;
@@ -104,18 +119,18 @@ always @(posedge clk or negedge rst_n) begin
                 pw_1_read_done  <= 0;
                 dw_read_done    <= 0;
                 pw_2_read_done  <= 0;
-                addra_0         <= {INPUT_CHANNEL{1'b0}};
-                addrb_0         <= {INPUT_CHANNEL{1'b0}};
-                addra_1         <= {ADDR_CHANNEL{1'b0}};
-                addrb_1         <= {ADDR_CHANNEL{1'b0}};
-                addra_w0        <= {ADDR_WMEM{1'b0}};
-                addra_w1        <= {ADDR_W1_MEM{1'b0}};
-                addra_w2        <= {ADDR_WMEM{1'b0}};
-
-                addra_bias_0    <= {ADDR_PARAM{1'b0}};
-                addra_mean_0    <= {ADDR_PARAM{1'b0}};
-                addra_std_0     <= {ADDR_PARAM{1'b0}};
-                addra_weight_0  <= {ADDR_PARAM{1'b0}};
+                addra_0         <= 0;
+                addrb_0         <= 0;
+                addra_1         <= 0;
+                addrb_1         <= 0;
+                addra_w0        <= 0;
+                addra_w1        <= 0;
+                addra_w2        <= 0;
+                                   
+                addra_bias_0    <= 0;
+                addra_mean_0    <= 0;
+                addra_std_0     <= 0;
+                addra_weight_0  <= 0;
             end
 
             ///////////////////////////////////////////////////////
@@ -124,7 +139,7 @@ always @(posedge clk or negedge rst_n) begin
             PW_1: begin
                 // BRAM_A, BRAM_W_0
                 if (enb_0) begin
-                    addrb_0  <= (addrb_0 >= 9'd63) ? {INPUT_CHANNEL{1'b0}} : addrb_0 + 1'b1;
+                    addrb_0  <= (addrb_0 >= 6'd63) ? 0 : addrb_0 + 1'b1;
                     if(addra_w0 == 24575) begin
                         addra_w0 <= 0;
                     end
@@ -133,7 +148,7 @@ always @(posedge clk or negedge rst_n) begin
                     end
                 end
                 else begin
-                    addrb_0  <= {INPUT_CHANNEL{1'b0}};
+                    addrb_0  <= 0;
                     addra_w0 <= {ADDR_WMEM{1'b0}};
                 end
 
@@ -146,13 +161,13 @@ always @(posedge clk or negedge rst_n) begin
             
                 // -------------------------------------------------
                 // BN params (PW_1): base ?ä∏Î¶¨Í±∞ ?õÑ Îß? 64?Å¥?ü≠ Ï¶ùÍ?
-                //   - mean  : glbl_cnt == 105 -> ?ã§?ùå clk?óê 1Ï¶ùÍ?, ?ù¥?õÑ Îß? 64?Å¥?ü≠
-                //   - std   : glbl_cnt == 116 -> ?ã§?ùå clk?óê 1Ï¶ùÍ?, ?ù¥?õÑ Îß? 64?Å¥?ü≠
-                //   - weight: glbl_cnt == 144 -> ?ã§?ùå clk?óê 1Ï¶ùÍ?, ?ù¥?õÑ Îß? 64?Å¥?ü≠
-                //   - bias  : glbl_cnt == 152 -> ?ã§?ùå clk?óê 1Ï¶ùÍ?, ?ù¥?õÑ Îß? 64?Å¥?ü≠
+                //   - mean  : cnt == 105 -> ?ã§?ùå clk?óê 1Ï¶ùÍ?, ?ù¥?õÑ Îß? 64?Å¥?ü≠
+                //   - std   : cnt == 116 -> ?ã§?ùå clk?óê 1Ï¶ùÍ?, ?ù¥?õÑ Îß? 64?Å¥?ü≠
+                //   - weight: cnt == 144 -> ?ã§?ùå clk?óê 1Ï¶ùÍ?, ?ù¥?õÑ Îß? 64?Å¥?ü≠
+                //   - bias  : cnt == 152 -> ?ã§?ùå clk?óê 1Ï¶ùÍ?, ?ù¥?õÑ Îß? 64?Å¥?ü≠
                 // -------------------------------------------------
                 // mean
-                if (glbl_cnt == 15'd106) begin
+                if (cnt == 15'd106) begin
                     mean_run   <= 1'b1;
                     mean_phase <= 6'd63;           
                 end else if (mean_run) begin
@@ -165,7 +180,7 @@ always @(posedge clk or negedge rst_n) begin
                 end
             
                 // std
-                if (glbl_cnt == 15'd117) begin
+                if (cnt == 15'd117) begin
                     std_run    <= 1'b1;
                     std_phase  <= 6'd63;
                 end else if (std_run) begin
@@ -178,7 +193,7 @@ always @(posedge clk or negedge rst_n) begin
                 end
             
                 // weight
-                if (glbl_cnt == 15'd145) begin
+                if (cnt == 15'd145) begin
                     weight_run   <= 1'b1;
                     weight_phase <= 6'd63;
                 end else if (weight_run) begin
@@ -191,7 +206,7 @@ always @(posedge clk or negedge rst_n) begin
                 end
             
                 // bias
-                if (glbl_cnt == 15'd153) begin
+                if (cnt == 15'd153) begin
                     bias_run   <= 1'b1;
                     bias_phase <= 6'd63;
                 end else if (bias_run) begin
@@ -254,7 +269,7 @@ always @(posedge clk or negedge rst_n) begin
                     addra_1 <= addra_1 + 1'b1;  
 
                 // mean: base=35+1, every 15
-                if (glbl_cnt == 15'd50) begin
+                if (cnt == 15'd50) begin
                     addra_mean_0 <= addra_mean_0 + 1'b1; mean_run<=1'b1; mean_phase<=6'd0;
                 end else if (mean_run) begin
                     if (mean_phase == 6'd28) begin
@@ -265,7 +280,7 @@ always @(posedge clk or negedge rst_n) begin
                 end
 
                 // std: base=46, every 15
-                if (glbl_cnt == 15'd61) begin
+                if (cnt == 15'd61) begin
                     addra_std_0 <= addra_std_0 + 1'b1; std_run<=1'b1; std_phase<=4'd0;
                 end else if (std_run) begin
                     if (std_phase == 6'd28) begin
@@ -276,7 +291,7 @@ always @(posedge clk or negedge rst_n) begin
                 end
 
                 // weight: base=74, every 15
-                if (glbl_cnt == 15'd89) begin
+                if (cnt == 15'd89) begin
                     addra_weight_0 <= addra_weight_0 + 1'b1; weight_run<=1'b1; weight_phase<=4'd0;
                 end else if (weight_run) begin
                     if (weight_phase == 6'd28) begin
@@ -287,7 +302,7 @@ always @(posedge clk or negedge rst_n) begin
                 end
 
                 // bias: base=82, every 15
-                if (glbl_cnt == 15'd97) begin
+                if (cnt == 15'd97) begin
                     addra_bias_0 <= addra_bias_0 + 1'b1; bias_run<=1'b1; bias_phase<=4'd0;
                 end else if (bias_run) begin
                     if (bias_phase == 6'd28) begin
@@ -366,18 +381,18 @@ always @(posedge clk or negedge rst_n) begin
                 pw_1_read_done <= 0;
                 dw_read_done <= 0;
                 pw_2_read_done <= 0;
-                dw_cnt         <= 5'd0;
-                addra_0        <= {INPUT_CHANNEL{1'b0}};
-                addrb_0        <= {INPUT_CHANNEL{1'b0}};
-                addra_1        <= {ADDR_CHANNEL{1'b0}};
-                addrb_1        <= {ADDR_CHANNEL{1'b0}};
-                addra_w0       <= {ADDR_WMEM{1'b0}};
-                addra_w1       <= {ADDR_W1_MEM{1'b0}};
-                addra_w2       <= {ADDR_WMEM{1'b0}};
-                addra_bias_0   <= {ADDR_PARAM{1'b0}};
-                addra_mean_0   <= {ADDR_PARAM{1'b0}};
-                addra_std_0    <= {ADDR_PARAM{1'b0}};
-                addra_weight_0 <= {ADDR_PARAM{1'b0}};
+                dw_cnt         <= 0;
+                addra_0        <= 0;
+                addrb_0        <= 0;
+                addra_1        <= 0;
+                addrb_1        <= 0;
+                addra_w0       <= 0;
+                addra_w1       <= 0;
+                addra_w2       <= 0;
+                addra_bias_0   <= 0;
+                addra_mean_0   <= 0;
+                addra_std_0    <= 0;
+                addra_weight_0 <= 0;
             end
         endcase
     end

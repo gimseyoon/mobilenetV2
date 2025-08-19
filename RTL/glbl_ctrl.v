@@ -79,28 +79,25 @@ localparam IDLE     = 3'b000,
 /////////////////////////////////////////////////////// 
 // Global counter (0..32767)
 ///////////////////////////////////////////////////////
-
-reg [14:0] glbl_cnt;
-
+reg  [2:0] local_state;
 wire pw_1_read_done;
 wire dw_read_done;
 wire pw_2_read_done;
 
 
-
 /////////////////////////////////////////////////////// 
-// Global counter run window
+// local_state
 ///////////////////////////////////////////////////////
 always @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
-        glbl_cnt <= 15'd0;
+        local_state <= 0;
     end else begin
-        if (state == PW_1 || state == DW || state == PW_2)
-            glbl_cnt <= glbl_cnt + 15'd1;
-        else
-            glbl_cnt <= 15'd0;
+        local_state <= state;
     end
 end
+
+
+
 
 /////////////////////////////////////////////////////// 
 // addr_counter
@@ -108,8 +105,7 @@ end
 addr_counter addr_counter_0 (
     .clk                (clk),
     .rst_n              (rst_n),
-    .state              (state),
-    .glbl_cnt           (glbl_cnt),
+    .state              (local_state),
     .save_valid         (save_valid),
     .skip_valid         (skip_valid),
     .result_save_valid (result_save_valid),
@@ -139,8 +135,7 @@ addr_counter addr_counter_0 (
 enable_counter enable_counter_0 (
     .clk                (clk),
     .rst_n              (rst_n),
-    .state              (state),
-    .glbl_cnt           (glbl_cnt),
+    .state              (local_state),
     .save_valid         (save_valid),
     .result_save_valid  (result_save_valid),
     .pw_1_read_done     (pw_1_read_done),

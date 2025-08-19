@@ -39,30 +39,46 @@ localparam IDLE     = 3'b000,
 /////////////////////////////////////////////////////// 
 // Registers / wires
 ///////////////////////////////////////////////////////
+reg  [2:0]                         local_state;
 reg  [ADDR_CHANNEL-1:0]            channel_num;
 reg  [4:0]                         bn_en_cnt;
 reg  [ADDR_CHANNEL-1:0]            acc_cnt;
 reg  signed [IO_WIDTH-1:0]         acc_out_reg [0:PIXEL-1];
-reg  [9:0]                         state_delay;
+reg  [11:0]                        state_delay;
 wire                               pw_1_en;
 wire                               dw_en;
 wire                               pw_2_en;
 reg  signed [IO_WIDTH-1:0]         mul_out_reg [0:PIXEL-1];
 
+
+
+/////////////////////////////////////////////////////// 
+// local_state
+///////////////////////////////////////////////////////
+always @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+        local_state <= 0;
+    end else begin
+        local_state <= state;
+    end
+end
+
 /////////////////////////////////////////////////////// 
 // Enables from state_delay
 ///////////////////////////////////////////////////////
-assign pw_1_en = (state == PW_1) ? state_delay[9] : 1'b0;
-assign dw_en   = (state == DW  ) ? state_delay[7] : 1'b0;
-assign pw_2_en = (state == PW_2) ? state_delay[8] : 1'b0;
+assign pw_1_en = (local_state == PW_1) ? state_delay[11] : 1'b0;
+assign dw_en   = (local_state == DW  ) ? state_delay[9] : 1'b0;
+assign pw_2_en = (local_state == PW_2) ? state_delay[10] : 1'b0;
 
 /////////////////////////////////////////////////////// 
 // state_delay (BRAM read wait)
 ///////////////////////////////////////////////////////
 always @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
-        state_delay <= 8'd0;
+        state_delay <= 0;
     end else begin
+        state_delay[11]<= state_delay[10];
+        state_delay[10]<= state_delay[9];
         state_delay[9] <= state_delay[8];
         state_delay[8] <= state_delay[7];
         state_delay[7] <= state_delay[6];
@@ -72,25 +88,25 @@ always @(posedge clk or negedge rst_n) begin
         state_delay[3] <= state_delay[2];
         state_delay[2] <= state_delay[1];
         state_delay[1] <= state_delay[0];
-        if (state == PW_1 || state == DW || state == PW_2)
-            state_delay[0] <= 1'b1;
+        if (local_state == PW_1 || local_state == DW || local_state == PW_2)
+            state_delay[0] <= 1;
         else
-            state_delay     <= 8'd0;
+            state_delay     <= 0;
     end
 end
 
 /////////////////////////////////////////////////////// 
 // Unpack mul_out -> mul_out_reg[PIXEL]
 ///////////////////////////////////////////////////////
-integer k;
+integer p;
 
 always @(posedge clk or negedge rst_n) begin
   if (!rst_n) begin
-    for (k = 0; k < PIXEL; k = k + 1)
-      mul_out_reg[k] <= 0;
+    for (p = 0; p < PIXEL; p = p + 1)
+      mul_out_reg[p] <= 0;
   end else begin
-    for (k = 0; k < PIXEL; k = k + 1)
-      mul_out_reg[k] <= mul_out[k*IO_WIDTH +: IO_WIDTH];
+    for (p = 0; p < PIXEL; p = p + 1)
+      mul_out_reg[p] <= mul_out[p*IO_WIDTH +: IO_WIDTH];
   end
 end
 /////////////////////////////////////////////////////// 
@@ -106,7 +122,7 @@ endgenerate
 /////////////////////////////////////////////////////// 
 // Main accumulate / valid / done / bn_en
 ///////////////////////////////////////////////////////
-integer k, x, y, p;
+integer k, x, y;
 always @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
         for (k = 0; k < PIXEL; k = k + 1) acc_out_reg[k] <= 0;
@@ -118,7 +134,7 @@ always @(posedge clk or negedge rst_n) begin
         dw_valid    <= 0; dw_done   <= 0;
         pw_2_valid  <= 0; pw_2_done <= 0;
     end else begin
-        case (state)
+        case (local_state)
             IDLE: begin
                 for (k = 0; k < PIXEL; k = k + 1) acc_out_reg[k] <= 0;
                 bn_en_cnt   <= 0;

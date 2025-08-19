@@ -8,6 +8,7 @@ module mobilenetV2 #(
     parameter W_WIDTH = 17,
     parameter INPUT_CHANNEL = 64,
     parameter ADDR_PARAM = 10,
+    parameter ADDR_IN = $clog2(64),
     parameter ADDR_CHANNEL  = $clog2(384),        // 9 (for CHANNEL = 384)
     parameter ADDR_WMEM = $clog2(384 * 64),       // 15 (for 64*384 = 24576)
     parameter ADDR_W1_MEM = $clog2(384 * 9)       // 12 (for 9*384 = 3456)
@@ -15,7 +16,7 @@ module mobilenetV2 #(
     input clk,
     input rst_n,
     input start,
-    output reg result_save_valid_o,
+    //output reg result_save_valid_o,
     output reg [13: 0] layer_8_result
 
 );
@@ -44,17 +45,8 @@ module mobilenetV2 #(
 /////////////////////////////////////////////////////////////
 // FSM
     wire [2:0] state;
-    (* KEEP="TRUE", DONT_TOUCH="TRUE" *) reg [2:0] state_to_acc;
-    (* KEEP="TRUE", DONT_TOUCH="TRUE" *) reg [2:0] state_to_glbl;
-    (* KEEP="TRUE", DONT_TOUCH="TRUE" *) reg [2:0] state_to_mux; // mul_in_sel/mul_weight_sel¿ë
-    
     wire[1:0] layer_state;
-    
-    always @(posedge clk) begin
-        state_to_acc  <= state;
-        state_to_glbl <= state;
-        state_to_mux  <= state;
-    end
+
 //////////////////////////////////////////////////
 // multiplier
     reg signed [IO_WIDTH * PIXEL - 1 : 0]   mul_in;   // [3528-1 : 0], 3528 bit
@@ -74,28 +66,36 @@ module mobilenetV2 #(
 //////////////////////////////////////////////////
 // BN_RELU
     wire signed [IO_WIDTH * PIXEL - 1 : 0] bn_relu_out;
+    reg  signed [IO_WIDTH * PIXEL - 1 : 0] bn_relu_out_q; 
     wire pw_1_bn_relu_done;
     wire dw_bn_relu_done;
     wire pw_2_bn_done;
     wire save_valid;
     wire skip_valid;
     
+    always @(posedge clk) begin
+        bn_relu_out_q <= bn_relu_out;
+    end
 //////////////////////////////////////////////////
 // SK
     wire signed [IO_WIDTH * PIXEL - 1 : 0] sk_in_1;
     wire signed [IO_WIDTH * PIXEL - 1 : 0] sk_in_2;
     wire signed [IO_WIDTH * PIXEL - 1 : 0] result;
+    reg  signed [IO_WIDTH * PIXEL - 1 : 0] result_q;
     wire result_save_valid;
     wire skip_done;
     
+    always @(posedge clk) begin
+        result_q <= result;
+    end
 //////////////////////////////////////////////////
 // bram_0
     wire                                        ena_0;
     wire                                        wea_0;
-    wire  [INPUT_CHANNEL-1:0]                   addra_0;
+    wire  [ADDR_IN-1:0]                         addra_0;
     wire  signed [IO_WIDTH * PIXEL - 1 : 0]     dina_0;
     wire                                        enb_0;
-    wire  [INPUT_CHANNEL-1:0]                   addrb_0;
+    wire  [ADDR_IN-1:0]                         addrb_0;
     wire  signed [IO_WIDTH * PIXEL - 1 : 0]     doutb_0;
 // bram_1
     wire                                        ena_1;
@@ -138,8 +138,68 @@ module mobilenetV2 #(
     wire    [ADDR_PARAM-1 : 0]                  addra_weight_0;
     wire    signed      [31:0]                  douta_weight_0;
     
+    //////////////////////////////////////////////////
+    // bram_q
+    reg                                         ena_0_q;
+    reg                                         wea_0_q;
+    reg  [ADDR_IN-1:0]                          addra_0_q;
+    reg  signed [IO_WIDTH * PIXEL - 1 : 0]      dina_0_q;
+    reg                                         enb_0_q;
+    reg  [ADDR_IN-1:0]                          addrb_0_q;
+    reg                                         ena_1_q;
+    reg                                         wea_1_q;
+    reg  [ADDR_CHANNEL-1:0]                     addra_1_q;
+    reg  signed [IO_WIDTH * PIXEL - 1 : 0]      dina_1_q;
+    reg                                         enb_1_q;
+    reg  [ADDR_CHANNEL-1:0]                     addrb_1_q;
+    reg                                         ena_w0_q;
+    reg  [ADDR_WMEM-1:0]                        addra_w0_q; 
+    reg                                         ena_w1_q;
+    reg  [ADDR_W1_MEM-1:0]                      addra_w1_q; 
+    reg                                         ena_w2_q;
+    reg  [ADDR_WMEM-1:0]                        addra_w2_q; 
+    reg                                         ena_bias_0_q;
+    reg  [ADDR_PARAM-1 : 0]                     addra_bias_0_q;
+    reg                                         ena_mean_0_q;
+    reg  [ADDR_PARAM-1 : 0]                     addra_mean_0_q;
+    reg                                         ena_std_0_q;
+    reg  [ADDR_PARAM-1 : 0]                     addra_std_0_q;
+    reg                                         ena_weight_0_q;
+    reg  [ADDR_PARAM-1 : 0]                     addra_weight_0_q;
     
 ////////////////////////////////////////////////////////////
+// 1-clk pipeline registers for BRAM/param signals
+always @(posedge clk or negedge rst_n) begin
+  if (!rst_n) begin
+    {ena_0_q,wea_0_q,addra_0_q,dina_0_q,enb_0_q,addrb_0_q,
+     ena_1_q,wea_1_q,addra_1_q,dina_1_q,enb_1_q,addrb_1_q,
+     ena_w0_q,addra_w0_q, ena_w1_q,addra_w1_q,ena_w2_q,addra_w2_q,
+     ena_bias_0_q,addra_bias_0_q,
+     ena_mean_0_q,addra_mean_0_q,
+     ena_std_0_q,addra_std_0_q,
+     ena_weight_0_q,addra_weight_0_q} <= 0;
+  end else begin
+    {ena_0_q,wea_0_q,addra_0_q,dina_0_q,enb_0_q,addrb_0_q,
+     ena_1_q,wea_1_q,addra_1_q,dina_1_q,enb_1_q,addrb_1_q,
+     ena_w0_q,addra_w0_q, ena_w1_q,addra_w1_q,ena_w2_q,addra_w2_q,
+     ena_bias_0_q,addra_bias_0_q,
+     ena_mean_0_q,addra_mean_0_q,
+     ena_std_0_q,addra_std_0_q,
+     ena_weight_0_q,addra_weight_0_q} <=
+    {ena_0,wea_0,addra_0,dina_0,enb_0,addrb_0,
+     ena_1,wea_1,addra_1,dina_1,enb_1,addrb_1,
+     ena_w0,addra_w0, ena_w1,addra_w1,ena_w2,addra_w2,
+     ena_bias_0,addra_bias_0,
+     ena_mean_0,addra_mean_0,
+     ena_std_0,addra_std_0,
+     ena_weight_0,addra_weight_0};
+  end
+end
+
+
+
+/////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////
 
     integer j;
     always@(posedge clk) begin
@@ -147,12 +207,13 @@ module mobilenetV2 #(
             layer_8_result[j] <= result[(j * 18 * 14) + 17];
         end  
     end
+    /*
     always@(posedge clk) begin
             result_save_valid_o <= result_save_valid;
     end
-    
+    */
 //////////////////////////////////////////////////
-// new_start
+// new_start ( layer (9, 10) )
 /*
     always@(posedge clk or negedge rst_n) begin
         if(!rst_n) begin
@@ -194,8 +255,8 @@ end
 // Data muxing for BRAM write data
 ///////////////////////////////////////////////////////
 
-    assign dina_0 = result;
-    assign dina_1 = bn_relu_out; 
+    assign dina_0 = result_q;
+    assign dina_1 = bn_relu_out_q; 
     
 //////////////////////////////////////////////////
 
@@ -228,7 +289,7 @@ FSM FSM_0 (
 glbl_ctrl glbl_ctrl_0 (
     .clk                (clk),
     .rst_n              (rst_n_sync),
-    .state              (state_to_glbl),
+    .state              (state),
     .save_valid         (save_valid),
     .skip_valid         (skip_valid),
     .acc_out            (acc_out),
@@ -282,7 +343,7 @@ glbl_ctrl glbl_ctrl_0 (
 accumulator accumulator_0 (
     .clk                (clk),
     .rst_n              (rst_n_sync),
-    .state              (state_to_acc),
+    .state              (state),
     .mul_out            (mul_out),
     .bn_en              (bn_en),
     .pw_1_valid         (pw_1_valid),
@@ -350,25 +411,25 @@ SK SK_0(
 
 bram_A bram_A (
   .clka                 (clk),    // input wire clka
-  .ena                  (ena_0),      // input wire ena
-  .wea                  (wea_0),      // input wire [0 : 0] wea
-  .addra                (addra_0),  // input wire [5 : 0] addra
+  .ena                  (ena_0_q),      // input wire ena
+  .wea                  (wea_0_q),      // input wire [0 : 0] wea
+  .addra                (addra_0_q),  // input wire [5 : 0] addra
   .dina                 (dina_0),    // input wire [3527 : 0] dina
   .clkb                 (clk),    // input wire clkb
-  .enb                  (enb_0),      // input wire enb
-  .addrb                (addrb_0),  // input wire [5 : 0] addrb
+  .enb                  (enb_0_q),      // input wire enb
+  .addrb                (addrb_0_q),  // input wire [5 : 0] addrb
   .doutb                (doutb_0)  // output wire [3527 : 0] doutb
 );
 // BRAM_B
 blk_mem_gen_1 bram_B (
   .clka                 (clk),          // input wire clka
-  .ena                  (ena_1),        // input wire ena
-  .wea                  (wea_1),        // input wire [0 : 0] wea
-  .addra                (addra_1),      // input wire [8 : 0] addra
+  .ena                  (ena_1_q),        // input wire ena
+  .wea                  (wea_1_q),        // input wire [0 : 0] wea
+  .addra                (addra_1_q),      // input wire [8 : 0] addra
   .dina                 (dina_1),       // input wire [3527 : 0] dina
   .clkb                 (clk),          // input wire clkb
-  .enb                  (enb_1),        // input wire enb
-  .addrb                (addrb_1),      // input wire [8 : 0] addrb
+  .enb                  (enb_1_q),        // input wire enb
+  .addrb                (addrb_1_q),      // input wire [8 : 0] addrb
   .doutb                (doutb_1)       // output wire [3527 : 0] doutb
 );
 
@@ -376,16 +437,16 @@ blk_mem_gen_1 bram_B (
 // BRAM_W0 (Pointwise_1 Weight)
 blk_mem_gen_2 bram_w0 (
   .clka                 (clk),          // input wire clka
-  .ena                  (ena_w0),       // input wire ena
-  .addra                (addra_w0),     // input wire [14 : 0] addra
+  .ena                  (ena_w0_q),       // input wire ena
+  .addra                (addra_w0_q),     // input wire [14 : 0] addra
   .douta                (douta_w0)      // output wire [16 : 0] douta
 );
 
 // BRAM_W1 (Depthwise Weight)
 blk_mem_gen_3 bram_w1 (
   .clka                 (clk),          // input wire clka
-  .ena                  (ena_w1),       // input wire ena
-  .addra                (addra_w1),     // input wire [11 : 0] addra
+  .ena                  (ena_w1_q),       // input wire ena
+  .addra                (addra_w1_q),     // input wire [11 : 0] addra
   .douta                (douta_w1)      // output wire [16 : 0] douta
 );
 
@@ -393,37 +454,37 @@ blk_mem_gen_3 bram_w1 (
 // BRAM_W2 (Pointwise_2 Weight)
 blk_mem_gen_4 bram_w2 (
   .clka                 (clk),          // input wire clka
-  .ena                  (ena_w2),       // input wire ena
-  .addra                (addra_w2),     // input wire [14 : 0] addra
+  .ena                  (ena_w2_q),       // input wire ena
+  .addra                (addra_w2_q),     // input wire [14 : 0] addra
   .douta                (douta_w2)      // output wire [16 : 0] douta
 );
 ///////////////////////////////////////////////////////////////
 // bram_PARAMETER 
 bram_bias bram_bias_0 (
   .clka(clk),    // input wire clka
-  .ena(ena_bias_0),      // input wire ena
-  .addra(addra_bias_0),  // input wire [9 : 0] addra
+  .ena(ena_bias_0_q),      // input wire ena
+  .addra(addra_bias_0_q),  // input wire [9 : 0] addra
   .douta(douta_bias_0)  // output wire [31 : 0] douta
 );
 
 bram_mean bram_mean_0 (
   .clka(clk),    // input wire clka
-  .ena(ena_mean_0),      // input wire ena
-  .addra(addra_mean_0),  // input wire [9 : 0] addra
+  .ena(ena_mean_0_q),      // input wire ena
+  .addra(addra_mean_0_q),  // input wire [9 : 0] addra
   .douta(douta_mean_0)  // output wire [31 : 0] douta
 );
 
 bram_std bram_std_0 (
   .clka(clk),    // input wire clka
-  .ena(ena_std_0),      // input wire ena
-  .addra(addra_std_0),  // input wire [9 : 0] addra
+  .ena(ena_std_0_q),      // input wire ena
+  .addra(addra_std_0_q),  // input wire [9 : 0] addra
   .douta(douta_std_0)  // output wire [31 : 0] douta
 );
 
 bram_weight bram_weight_0 (
   .clka(clk),    // input wire clka
-  .ena(ena_weight_0),      // input wire ena
-  .addra(addra_weight_0),  // input wire [9 : 0] addra
+  .ena(ena_weight_0_q),      // input wire ena
+  .addra(addra_weight_0_q),  // input wire [9 : 0] addra
   .douta(douta_weight_0)  // output wire [31 : 0] douta
 );
 /////////////////////////////////////////////////////////////

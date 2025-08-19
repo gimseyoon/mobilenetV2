@@ -13,7 +13,6 @@ module enable_counter #(
     input                       clk,
     input                       rst_n,
     input         [2:0]         state,
-    input         [14:0]        glbl_cnt,
     input                       save_valid,
     input                       result_save_valid,
     input                       pw_1_read_done,
@@ -72,9 +71,26 @@ assign wea_0 = (state == PW_2) && result_save_valid;
 ///////////////////////////////////////////////////////
 // Registers for pulse generator
 ///////////////////////////////////////////////////////
+
+reg [14:0]  cnt;
 reg         active;     // PW_2 pulse block active
 reg [8:0]   phase;      // 0..PERIOD-1
 reg [5:0]   rep_cnt;    // 0..63
+
+
+/////////////////////////////////////////////////////// 
+// Global counter run window
+///////////////////////////////////////////////////////
+always @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+        cnt <= 15'd0;
+    end else begin
+        if (state == PW_1 || state == DW || state == PW_2)
+            cnt <= cnt + 15'd1;
+        else
+            cnt <= 15'd0;
+    end
+end
 
 ///////////////////////////////////////////////////////
 // Sequential logic
@@ -176,7 +192,7 @@ always @(posedge clk or negedge rst_n) begin
                 // Two-clock pulses on enb_0, every 384 cycles, 64 times, starting at 473
                 if (!active) begin
                     enb_0 <= 1'b0;
-                    if (glbl_cnt == START) begin
+                    if (cnt == START) begin
                         active  <= 1'b1;
                         phase   <= 9'd0;
                         rep_cnt <= 6'd0;

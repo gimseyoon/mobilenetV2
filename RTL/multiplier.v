@@ -27,6 +27,7 @@ module multiplier #(
 ///////////////////////////////////////////////////////
 // Internal regs/wires
 ///////////////////////////////////////////////////////
+reg signed [IO_WIDTH*PIXEL-1:0] mul_in_q;
 reg  signed [IO_WIDTH-1:0]  mul_out_reg [0:PIXEL-1];
 wire signed [34:0]          mul_out_w   [0:PIXEL-1];
 
@@ -48,8 +49,22 @@ begin
 end
 endfunction
 
+
+
+/////////////////////////////////////////////////////// 
+// local_state
 ///////////////////////////////////////////////////////
-// Register outputs (clear when *_done pulses)
+always @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+        mul_in_q <= 0;
+    end else begin
+        mul_in_q <= mul_in;
+    end
+end
+
+
+///////////////////////////////////////////////////////
+// Register outputs
 ///////////////////////////////////////////////////////
 integer k;
 
@@ -77,15 +92,21 @@ endgenerate
 ///////////////////////////////////////////////////////
 genvar i;
 generate
-    for (i = 0; i < PIXEL; i = i + 1) begin : MULS
-        (* use_dsp = "yes" *)
-        mult_gen_0 u_mul (
-            .CLK (clk),
-            .A   ($signed(mul_in[ IO_WIDTH*(PIXEL - i)-1 : IO_WIDTH*(PIXEL - i - 1) ])),
-            .B   (mul_weight),
-            .P   (mul_out_w[PIXEL-1-i])
-        );
-    end
+  for (i=0; i<PIXEL; i=i+1) begin : MULS
+    // weight를 DSP 바로 앞에서 로컬화 (팬아웃=1)
+    (* DONT_TOUCH = "true" *) reg signed [W_WIDTH-1:0] mul_weight_q;
+    always @(posedge clk or negedge rst_n)
+      if(!rst_n) mul_weight_q <= 0; else mul_weight_q <= mul_weight; 
+
+    (* use_dsp = "yes" *)
+    mult_gen_0 multiplier_0 (
+      .CLK(clk),  // input wire CLK
+      .A(mul_in_q[IO_WIDTH*(i+1)-1 : IO_WIDTH*i]),      // input wire [17 : 0] A
+      .B(mul_weight_q),      // input wire [16 : 0] B
+      .P(mul_out_w[i])      // output wire [34 : 0] P
+    );
+
+  end
 endgenerate
 
 endmodule

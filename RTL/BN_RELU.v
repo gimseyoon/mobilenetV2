@@ -44,6 +44,7 @@ localparam IDLE     = 3'b000,
 /////////////////////////////////////////////////////// 
 // Registers / Wires
 ///////////////////////////////////////////////////////
+reg          [2:0]                  local_state;
 reg          [4:0]                  bn_cnt;             // 0~13
 reg          [4:0]                  bn_save_cnt;        // 0~27
 reg          [ADDR_CHANNEL-1:0]     bn_channel_num;
@@ -53,6 +54,19 @@ wire  signed [IO_WIDTH-1:0]         bn_single_out     [0:6];
 reg   signed [IO_WIDTH-1:0]         bn_relu_out_array [0:PIXEL-1];
 wire         [6:0]                  valid_single;
 wire                                bn_valid;
+
+
+/////////////////////////////////////////////////////// 
+// local_state
+///////////////////////////////////////////////////////
+always @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+        local_state <= 0;
+    end else begin
+        local_state <= state;
+    end
+end
+
 
 /////////////////////////////////////////////////////// 
 // All 14 lanes valid
@@ -82,7 +96,7 @@ always @(posedge clk or negedge rst_n) begin
         end
 
         // save_valid / skip_valid
-        if (state == PW_1 || state == DW) begin
+        if (local_state == PW_1 || local_state == DW) begin
             if (bn_valid && bn_save_cnt == 5'd27) save_valid <= 1'b1;
             else                                  save_valid <= 1'b0;
         end 
@@ -90,7 +104,7 @@ always @(posedge clk or negedge rst_n) begin
             save_valid <= 1'b0;
         end
 
-        if (state == PW_2) begin
+        if (local_state == PW_2) begin
             if (bn_valid && bn_save_cnt == 5'd27) skip_valid <= 1'b1;
             else                                  skip_valid <= 1'b0;
         end 
@@ -165,11 +179,11 @@ always @(posedge clk or negedge rst_n) begin
         if (bn_valid) begin
             for (t = 0; t < 7; t = t + 1) begin
                 idx = bn_save_cnt*7 + t;
-                if (state == PW_1 || state == DW) begin
+                if (local_state == PW_1 || local_state == DW) begin
                     // ReLU
                     if (bn_single_out[t][IO_WIDTH-1]) bn_relu_out_array[idx] <= {IO_WIDTH{1'b0}};
                     else                               bn_relu_out_array[idx] <= bn_single_out[t];
-                end else if (state == PW_2) begin
+                end else if (local_state == PW_2) begin
                     bn_relu_out_array[idx] <= bn_single_out[t];
                 end else begin
                     bn_relu_out_array[idx] <= {IO_WIDTH{1'b0}};
@@ -188,9 +202,9 @@ always @(posedge clk or negedge rst_n) begin
         dw_bn_relu_done   <= 1'b0;
         pw_2_bn_done      <= 1'b0;
     end else begin
-        pw_1_bn_relu_done <= (state == PW_1) && (bn_save_cnt == 5'd27) && (bn_channel_num == 9'd383);
-        dw_bn_relu_done   <= (state == DW)   && (bn_save_cnt == 5'd27) && (bn_channel_num == 9'd383);
-        pw_2_bn_done      <= (state == PW_2) && (bn_save_cnt == 5'd27) && (bn_channel_num == 9'd063);
+        pw_1_bn_relu_done <= (local_state == PW_1) && (bn_save_cnt == 5'd27) && (bn_channel_num == 9'd383);
+        dw_bn_relu_done   <= (local_state == DW)   && (bn_save_cnt == 5'd27) && (bn_channel_num == 9'd383);
+        pw_2_bn_done      <= (local_state == PW_2) && (bn_save_cnt == 5'd27) && (bn_channel_num == 9'd063);
     end
 end
 
