@@ -27,16 +27,17 @@ module tb_mobilenetV2 #(
         .ADDR_CHANNEL(ADDR_CHANNEL),
         .ADDR_WMEM(ADDR_WMEM)
     ) dut (
+        //.clk_in(clk),
         .clk(clk),
         .rst_n(rst_n),
         .start(start),
-        .result_save_valid_o(result_save_valid),
+        //.result_save_valid_o(result_save_valid),
         .layer_8_result(layer_8_result)
     );
 
     // Clock: 300 MHz 예) 주기 3.333...ns -> #1.6666667 토글
     initial clk = 0;
-    always #10 clk = ~clk;
+    always #5 clk = ~clk;
 
     // Reset
     initial begin

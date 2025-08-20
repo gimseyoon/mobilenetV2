@@ -13,6 +13,7 @@ module mobilenetV2 #(
     parameter ADDR_WMEM = $clog2(384 * 64),       // 15 (for 64*384 = 24576)
     parameter ADDR_W1_MEM = $clog2(384 * 9)       // 12 (for 9*384 = 3456)
 )(
+    //input clk_in,
     input clk,
     input rst_n,
     input start,
@@ -20,7 +21,7 @@ module mobilenetV2 #(
     output reg [13: 0] layer_8_result
 
 );
-    
+
 ////////////////////////////////////////////////////////////
 
     localparam IDLE         = 3'b000,
@@ -38,14 +39,17 @@ module mobilenetV2 #(
                LAYER_10 = 2'b11;
                
 /////////////////////////////////////////////////////////////
-
-    reg new_start;
+    //wire clk;
+    wire locked;
+    reg  new_start;
     wire rst_n_sync;
+    
+
     
 /////////////////////////////////////////////////////////////
 // FSM
     wire [2:0] state;
-    wire[1:0] layer_state;
+    wire [1:0] layer_state;
 
 //////////////////////////////////////////////////
 // multiplier
@@ -166,6 +170,16 @@ module mobilenetV2 #(
     reg  [ADDR_PARAM-1 : 0]                     addra_std_0_q;
     reg                                         ena_weight_0_q;
     reg  [ADDR_PARAM-1 : 0]                     addra_weight_0_q;
+    
+    
+    
+    
+    reg signed [IO_WIDTH -1 : 0] result_1; always@(posedge clk or negedge rst_n_sync) if(!rst_n_sync) result_1 <= 0; else result_1 <= result[IO_WIDTH -1 : 0];
+    reg signed [IO_WIDTH -1 : 0] result_2; always@(posedge clk or negedge rst_n_sync) if(!rst_n_sync) result_2 <= 0; else result_2 <= result[2*IO_WIDTH-1 : IO_WIDTH];
+    reg signed [IO_WIDTH -1 : 0] result_3; always@(posedge clk or negedge rst_n_sync) if(!rst_n_sync) result_3 <= 0; else result_3 <= result[IO_WIDTH*PIXEL-1-IO_WIDTH -: IO_WIDTH];
+    reg signed [IO_WIDTH -1 : 0] result_4; always@(posedge clk or negedge rst_n_sync) if(!rst_n_sync) result_4 <= 0; else result_4 <= result[IO_WIDTH*PIXEL-1 -: IO_WIDTH];
+    reg all_done;                          always@(posedge clk or negedge rst_n_sync) if(!rst_n_sync) all_done <= 0; else all_done <= skip_done;
+    
     
 ////////////////////////////////////////////////////////////
 // 1-clk pipeline registers for BRAM/param signals
@@ -488,5 +502,33 @@ bram_weight bram_weight_0 (
   .douta(douta_weight_0)  // output wire [31 : 0] douta
 );
 /////////////////////////////////////////////////////////////
+
+/*
+clk_wiz_0 clk_100_0 (
+    // Clock out ports
+    .clk_100(clk),     // output clk_100
+    // Status and control signals
+    .reset(rst_n_sync), // input reset
+    .locked(locked),       // output locked
+   // Clock in ports
+    .clk_in1(clk_in));      // input clk_in1
+
+
+
+
+ila_0 ila_0 (
+	.clk(clk), // input wire clk
+	.probe0(start), // input wire [0:0]  probe0  
+	.probe1(all_done), // input wire [0:0]  probe1 
+	.probe2(result_1), // input wire [17:0]  probe2 
+	.probe3(result_2), // input wire [17:0]  probe3 
+	.probe4(result_3), // input wire [17:0]  probe4 
+	.probe5(result_4) // input wire [17:0]  probe5
+);
+*/
+
+
+
+
 
 endmodule

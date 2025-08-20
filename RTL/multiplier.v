@@ -5,13 +5,13 @@
 `timescale 1ns / 1ps
 
 module multiplier #(
-    parameter IO_WIDTH      = 18,
-    parameter ROW           = 14,
-    parameter COLUMN        = 14,
-    parameter PIXEL         = ROW * COLUMN,              // 14 * 14 = 196
-    parameter W_WIDTH       = 17,
-    parameter ADDR_CHANNEL  = $clog2(384),               // 8 (for CHANNEL = 384)
-    parameter ADDR_WMEM     = $clog2(384 * 64),          // 15 (for 64*384 = 24576)
+    parameter IO_WIDTH       = 18,
+    parameter ROW            = 14,
+    parameter COLUMN         = 14,
+    parameter PIXEL          = ROW * COLUMN,              // 14 * 14 = 196
+    parameter W_WIDTH        = 17,
+    parameter ADDR_CHANNEL   = $clog2(384),               // 8 (for CHANNEL = 384)
+    parameter ADDR_WMEM      = $clog2(384 * 64),          // 15 (for 64*384 = 24576)
     parameter integer R_SHIFT = 16
 )(
     input                                       clk,
@@ -27,9 +27,13 @@ module multiplier #(
 ///////////////////////////////////////////////////////
 // Internal regs/wires
 ///////////////////////////////////////////////////////
-reg signed [IO_WIDTH*PIXEL-1:0] mul_in_q;
-reg  signed [IO_WIDTH-1:0]  mul_out_reg [0:PIXEL-1];
-wire signed [34:0]          mul_out_w   [0:PIXEL-1];
+reg  signed [IO_WIDTH*PIXEL-1:0] mul_in_q;
+
+// 행 단위 가중치 복제 (fan-out 196 -> 14)
+reg  signed [W_WIDTH-1:0]  mul_weight_row_q [0:ROW-1];
+
+reg  signed [IO_WIDTH-1:0] mul_out_reg [0:PIXEL-1];
+wire signed [34:0]         mul_out_w   [0:PIXEL-1];
 
 ///////////////////////////////////////////////////////
 // Rounding + right-shift to signed 18-bit
@@ -49,34 +53,43 @@ begin
 end
 endfunction
 
-
-
-/////////////////////////////////////////////////////// 
-// local_state
+///////////////////////////////////////////////////////
+// Pipeline: mul_in (1clk)
 ///////////////////////////////////////////////////////
 always @(posedge clk or negedge rst_n) begin
-    if (!rst_n) begin
-        mul_in_q <= 0;
-    end else begin
-        mul_in_q <= mul_in;
-    end
+    if (!rst_n) mul_in_q <= {IO_WIDTH*PIXEL{1'b0}};
+    else        mul_in_q <= mul_in;
 end
 
+///////////////////////////////////////////////////////
+// Pipeline: mul_weight (행 단위로 1clk 복제)
+///////////////////////////////////////////////////////
+integer r;
+always @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+        for (r=0; r<ROW; r=r+1) mul_weight_row_q[r] <= {W_WIDTH{1'b0}};
+    end else begin
+        // 한 사이클에 14개 행 레지스터 모두 동일한 mul_weight 캡처
+        for (r=0; r<ROW; r=r+1) mul_weight_row_q[r] <= mul_weight;
+    end
+end
+// 참고: 필요시 아래와 같이 도와줄 수도 있음 (자동 복제 유도)
+// (* max_fanout = 16 *) wire signed [W_WIDTH-1:0] mul_weight_buf = mul_weight;
 
 ///////////////////////////////////////////////////////
 // Register outputs
 ///////////////////////////////////////////////////////
 integer k;
-
 always @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
         for (k = 0; k < PIXEL; k = k + 1)
-            mul_out_reg[k] <= 0;
+            mul_out_reg[k] <= {IO_WIDTH{1'b0}};
     end else begin
         for (k = 0; k < PIXEL; k = k + 1)
             mul_out_reg[k] <= round_shift_signed18(mul_out_w[k]);
     end
 end
+
 ///////////////////////////////////////////////////////
 // Pack register array -> bus
 ///////////////////////////////////////////////////////
@@ -89,24 +102,24 @@ endgenerate
 
 ///////////////////////////////////////////////////////
 // MULTIPLIER instantiation (per pixel)
+//   - B 입력은 "행 레지스터"에서만 가져옴 (fan-out ~14)
+//   - A 입력은 mul_in_q에서 픽셀별 슬라이스
 ///////////////////////////////////////////////////////
-genvar i;
+genvar ry, cx;
 generate
-  for (i=0; i<PIXEL; i=i+1) begin : MULS
-    // weight를 DSP 바로 앞에서 로컬화 (팬아웃=1)
-    (* DONT_TOUCH = "true" *) reg signed [W_WIDTH-1:0] mul_weight_q;
-    always @(posedge clk or negedge rst_n)
-      if(!rst_n) mul_weight_q <= 0; else mul_weight_q <= mul_weight; 
+    for (ry = 0; ry < ROW;    ry = ry + 1) begin : ROWS
+    for (cx = 0; cx < COLUMN; cx = cx + 1) begin : COLS
+        localparam integer IDX = ry*COLUMN + cx;
 
-    (* use_dsp = "yes" *)
-    mult_gen_0 multiplier_0 (
-      .CLK(clk),  // input wire CLK
-      .A(mul_in_q[IO_WIDTH*(i+1)-1 : IO_WIDTH*i]),      // input wire [17 : 0] A
-      .B(mul_weight_q),      // input wire [16 : 0] B
-      .P(mul_out_w[i])      // output wire [34 : 0] P
-    );
-
-  end
+        (* use_dsp = "yes" *)
+        mult_gen_0 u_mul (
+            .CLK (clk),
+            .A   ($signed(mul_in_q[IO_WIDTH*(IDX+1)-1 : IO_WIDTH*IDX])),
+            .B   (mul_weight_row_q[ry]),   // 행 단위 1clk 레지스터
+            .P   (mul_out_w[IDX])
+        );
+    end
+    end
 endgenerate
 
 endmodule
