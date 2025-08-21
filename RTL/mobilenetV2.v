@@ -14,7 +14,8 @@ module mobilenetV2 #(
     parameter ADDR_W1_MEM = $clog2(384 * 9)       // 12 (for 9*384 = 3456)
 )(
     //input clk_in,
-    input clk,
+    input clk_in,
+    //input clk,
     input rst_n,
     input start,
     //output reg result_save_valid_o,
@@ -39,7 +40,7 @@ module mobilenetV2 #(
                LAYER_10 = 2'b11;
                
 /////////////////////////////////////////////////////////////
-    //wire clk;
+    wire clk;
     wire locked;
     reg  new_start;
     wire rst_n_sync;
@@ -250,6 +251,7 @@ end
     
 //////////////////////////////////////////////////
 // decide multiplier input
+/*
 always @(posedge clk or negedge rst_n) begin
     if(!rst_n) begin
         mul_in <= 0;
@@ -264,7 +266,7 @@ always @(posedge clk or negedge rst_n) begin
     end
 
 end 
-
+*/
 /////////////////////////////////////////////////////// 
 // Data muxing for BRAM write data
 ///////////////////////////////////////////////////////
@@ -275,10 +277,63 @@ end
 //////////////////////////////////////////////////
 
 
+// ============================================================
+// FANOUT SPLIT for state  (no latency)
+//    - state_buf : keep
+//    - state_row[r] : row 별 복제 (Vivado가 자동 복제하도록 max_fanout 힌트)
+// ============================================================
+(* keep = "true" *) wire [2:0] state_buf = state;
+(* max_fanout = 64 *) wire [2:0] state_row [0:ROW-1];
+
+genvar rr;
+generate
+  for (rr=0; rr<ROW; rr=rr+1) begin : STATE_FANOUT_SPLIT
+    assign state_row[rr] = state_buf; // 동일 사이클 전달(지연 없음)
+  end
+endgenerate
+
+// ============================================================
+// decide multiplier input  (row별로 select → 팬아웃/배선길이 축소)
+// ============================================================
+integer k;
+always @(posedge clk or negedge rst_n_sync) begin
+  if(!rst_n_sync) begin
+    mul_in     <= 0;
+    mul_weight <= 0;
+  end else begin
+    // 데이터 입력(row별 case)
+    for (k = 0; k < PIXEL; k = k + 1) begin : MULIN_UPDATE
+      case (state_row[k/14])
+        PW_1: mul_in[IO_WIDTH*(k+1)-1 -: IO_WIDTH] <= doutb_0[IO_WIDTH*(k+1)-1 -: IO_WIDTH];
+        DW  : mul_in[IO_WIDTH*(k+1)-1 -: IO_WIDTH] <= doutb_1[IO_WIDTH*(k+1)-1 -: IO_WIDTH];
+        PW_2: mul_in[IO_WIDTH*(k+1)-1 -: IO_WIDTH] <= doutb_1[IO_WIDTH*(k+1)-1 -: IO_WIDTH];
+        default: mul_in[IO_WIDTH*(k+1)-1 -: IO_WIDTH] <= 0;
+      endcase
+    end
+
+    // weight 선택(팬아웃 작아서 단일 select 유지)
+    case (state_buf)
+      PW_1: mul_weight <= douta_w0;
+      DW  : mul_weight <= douta_w1;
+      PW_2: mul_weight <= douta_w2;
+      default: mul_weight <= 0;
+    endcase
+  end
+end
+
+
+
+
+
+
+
+
+
+
 // Instantiate FSM
 reset_sync reset_sync_0(
     .clk(clk),
-    .rst_n_async(rst_n),     // 보드에서 들어온 비동기 리셋(Active-Low)
+    .rst_n_async(rst_n),    
     .rst_n_sync(rst_n_sync)
 );
 
@@ -503,7 +558,7 @@ bram_weight bram_weight_0 (
 );
 /////////////////////////////////////////////////////////////
 
-/*
+
 clk_wiz_0 clk_100_0 (
     // Clock out ports
     .clk_100(clk),     // output clk_100
@@ -515,7 +570,7 @@ clk_wiz_0 clk_100_0 (
 
 
 
-
+/*
 ila_0 ila_0 (
 	.clk(clk), // input wire clk
 	.probe0(start), // input wire [0:0]  probe0  
