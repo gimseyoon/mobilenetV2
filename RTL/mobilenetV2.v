@@ -17,9 +17,11 @@ module mobilenetV2 #(
     input clk,
     input rst_n,
     input start,
-    //output reg result_save_valid_o,
+    output result_save_valid_o,
+    output signed [3527:0] result_o,
     output reg [13: 0] layer_8_result
 );
+
 
 ////////////////////////////////////////////////////////////
 
@@ -93,6 +95,9 @@ module mobilenetV2 #(
     always @(posedge clk) begin
         result_q <= result;
     end
+    
+    assign result_save_valid_o = result_save_valid;
+    assign result_o = result;
 //////////////////////////////////////////////////
 // bram_0
     wire                                        ena_0;
@@ -577,15 +582,15 @@ clk_wiz_0 clk_100_0 (
 
 ila_0 ila_0 (
 	.clk(clk), // input wire clk
-	.probe0(start), // input wire [0:0]  probe0  
+	.probe0(result_save_valid), // input wire [0:0]  probe0  
 	.probe1(all_done), // input wire [0:0]  probe1 
 	.probe2(result_1), // input wire [17:0]  probe2 
 	.probe3(result_2), // input wire [17:0]  probe3 
 	.probe4(result_3), // input wire [17:0]  probe4 
 	.probe5(result_4) // input wire [17:0]  probe5
 );
-*/
 
+*/
 
 
 

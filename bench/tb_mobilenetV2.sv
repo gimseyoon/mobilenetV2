@@ -1,6 +1,6 @@
 `timescale 1ns / 1ps
 
-module tb_mobilenetV2 #(
+module tb_mobilenetV2#(
     parameter IO_WIDTH = 18,
     parameter ROW = 14,
     parameter COLUMN = 14,
@@ -11,96 +11,76 @@ module tb_mobilenetV2 #(
     parameter ADDR_W1_MEM = $clog2(384 * 9)
 );
 
-    reg clk;
-    reg rst_n;
-    reg start;
-    wire result_save_valid;
-    wire [13:0] layer_8_result;
+  reg clk = 1'b0;
+  reg rst = 1'b1;
+  reg start = 1'b0;
 
-    // DUT
-    mobilenetV2 #(
-        .IO_WIDTH(IO_WIDTH),
-        .ROW(ROW),
-        .COLUMN(COLUMN),
-        .PIXEL(PIXEL),
-        .W_WIDTH(W_WIDTH),
-        .ADDR_CHANNEL(ADDR_CHANNEL),
-        .ADDR_WMEM(ADDR_WMEM)
-    ) dut (
-        //.clk_in(clk),
-        .clk(clk),
-        .rst_n(rst_n),
-        .start(start),
-        //.result_save_valid_o(result_save_valid),
-        .layer_8_result(layer_8_result)
-    );
+  // 모니터링: ReLU 결과
+  wire signed [3527:0] result;
+  wire [13:0] layer_8_result;
+  wire result_save_valid;
+    // Clock generation
+    always #5 clk = ~clk; // 100MHz (10ns period)
 
-    // Clock: 300 MHz 예) 주기 3.333...ns -> #1.6666667 토글
-    initial clk = 0;
-    always #5 clk = ~clk;
-
-    // Reset
+    // Stimulus
     initial begin
-        rst_n = 0;
-        #25 rst_n = 1;
-    end
+        #200;
+        rst = 0;
+        #20;
+        rst = 1;
+        #20;
 
-    // Start
-    initial begin
+        start = 1;
+        #10;
         start = 0;
-        #400 start = 1;
-        #25  start = 0;
+
+        // 충분한 처리 시간 확보
+        #900000;
+
+        #200;
+        $finish;
     end
 
-    // ----------------------------
-    // 파일로 출력 (skip_valid=1일 때만)
-    // ----------------------------
-    integer fd;
-    integer ch;           // 0..63 (총 64채널)
-    integer y, x, idx;
-    integer val;          // 32-bit signed for print
-    reg result_save_valid_d;     // 에지 검출용
 
-    initial begin
-        fd = $fopen("C:/seyoon/mobilenetV2/output.txt", "w");
-        if (fd == 0) begin
-            $display("ERROR: cannot open output.txt");
-            $finish;
-        end
-        ch = 0;
-        result_save_valid_d = 0;
+
+  // -------------------------
+  // DUT
+  // -------------------------
+  mobilenetV2 DUT (
+    .clk(clk),
+    .rst_n(rst),
+    .start(start),
+    .result_save_valid_o(result_save_valid),
+    .result_o(result),
+    .layer_8_result(layer_8_result)
+  );
+  
+
+integer fd;
+
+initial begin
+    fd = $fopen("result.txt", "w");
+    if (fd == 0) begin
+        $display("파일 열기 실패");
+        $finish;
     end
+end
 
-    // skip_valid의 rising-edge에서 한 채널(14x14) 기록
-    always @(posedge clk) begin
-        result_save_valid_d <= result_save_valid;
-
-        if (rst_n && (result_save_valid && !result_save_valid_d)) begin
-            // 채널 헤더(원하면 주석 해제)
-            // $fwrite(fd, "CHANNEL %0d\n", ch);
-
-            for (y = 0; y < ROW; y = y + 1) begin
-                for (x = 0; x < COLUMN; x = x + 1) begin
-                    idx = y*COLUMN + x;
-                    // 18-bit slice를 부호확장하여 정수로
-                    val = $signed(layer_8_result[IO_WIDTH*(idx+1)-1 -: IO_WIDTH]);
-                    // 같은 줄에 공백으로 구분, 줄 끝에 개행
-                    if (x == COLUMN-1)
-                        $fwrite(fd, "%0d\n", val);
-                    else
-                        $fwrite(fd, "%0d ",  val);
-                end
-            end
-            // 채널 사이에 빈 줄 하나 (원하지 않으면 주석)
-            $fwrite(fd, "\n");
-
-            ch = ch + 1;
-            if (ch == 64) begin
-                $display("All 64 channels written to output.txt");
-                $fclose(fd);
-                $finish;
-            end
-        end
+// 1) 우선 동작 확인용: 매 클럭마다 시간과 sum_out을 찍어보기
+//    (잘 나오면 아래의 if(in_valid) 조건 버전으로 바꾸세요)
+always @(posedge clk) begin
+    if(result_save_valid) begin
+        $fdisplay(fd, "%0t %04h", $time, result);
     end
+end
 
+// 2) 시뮬 끝나기 직전에 닫기 (같은 초기 블록에서 $finish보다 먼저!)
+initial begin
+    #500000000;             // 사용자가 말한 시뮬 종료 시점
+    $fclose(fd);       // 반드시 먼저 닫고
+    $finish;           // 그 다음 종료
+end
 endmodule
+
+    
+
