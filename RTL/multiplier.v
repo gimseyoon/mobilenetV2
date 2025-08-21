@@ -1,124 +1,104 @@
-// Module multiplier:
-// receives 18-bit * [196] mul_in, multiplies each by a 17-bit mul_weight,
-// rounds & shifts to 18-bit, and outputs as [196] mul_out.
-
+// multiplier
+// - 18b × [196] mul_in 을 17b weight와 곱해 18b로 round+shift
+// - weight는 행/소그룹 단위로 레지스터 복제해 fanout과 net delay 완화
 `timescale 1ns / 1ps
 
 module multiplier #(
-    parameter IO_WIDTH       = 18,
-    parameter ROW            = 14,
-    parameter COLUMN         = 14,
-    parameter PIXEL          = ROW * COLUMN,              // 14 * 14 = 196
-    parameter W_WIDTH        = 17,
-    parameter ADDR_CHANNEL   = $clog2(384),               // 8 (for CHANNEL = 384)
-    parameter ADDR_WMEM      = $clog2(384 * 64),          // 15 (for 64*384 = 24576)
-    parameter integer R_SHIFT = 16
+    parameter IO_WIDTH        = 18,
+    parameter ROW             = 14,
+    parameter COLUMN          = 14,
+    parameter PIXEL           = ROW * COLUMN,   // 196
+    parameter W_WIDTH         = 17,
+    parameter integer R_SHIFT = 16,
+    // 한 행을 SUB개 소그룹으로 나눠 weight 레지스터 복제 (1,2,4…)
+    parameter integer SUB     = 2
 )(
-    input                                       clk,
-    input                                       rst_n,
-    input                                       pw_1_done,
-    input                                       dw_done,
-    input                                       pw_2_done,
-    input  signed [IO_WIDTH*PIXEL-1:0]          mul_in,      // [3528-1:0]
-    input  signed [W_WIDTH-1:0]                 mul_weight,  // [16:0]
-    output signed [IO_WIDTH*PIXEL-1:0]          mul_out      // [3528-1:0]
+    input                               clk,
+    input                               rst_n,
+    input  signed [IO_WIDTH*PIXEL-1:0]  mul_in,
+    input  signed [W_WIDTH-1:0]         mul_weight,
+    output signed [IO_WIDTH*PIXEL-1:0]  mul_out
 );
 
 ///////////////////////////////////////////////////////
-// Internal regs/wires
+// 입력 1clk 파이프라인
 ///////////////////////////////////////////////////////
-reg  signed [IO_WIDTH*PIXEL-1:0] mul_in_q;
-
-// 행 단위 가중치 복제 (fan-out 196 -> 14)
-reg  signed [W_WIDTH-1:0]  mul_weight_row_q [0:ROW-1];
-
-reg  signed [IO_WIDTH-1:0] mul_out_reg [0:PIXEL-1];
-wire signed [34:0]         mul_out_w   [0:PIXEL-1];
+reg signed [IO_WIDTH*PIXEL-1:0] mul_in_q;
+always @(posedge clk or negedge rst_n)
+    if (!rst_n) mul_in_q <= {IO_WIDTH*PIXEL{1'b0}};
+    else        mul_in_q <= mul_in;
 
 ///////////////////////////////////////////////////////
-// Rounding + right-shift to signed 18-bit
+// weight 복제 레지스터 (평면 1D 배열: 인덱스 = 행*SUB + 그룹)
+///////////////////////////////////////////////////////
+(* DONT_TOUCH = "true" *)
+reg signed [W_WIDTH-1:0] w_dup [0:ROW*SUB-1];
+
+integer rr, gg;
+always @(posedge clk or negedge rst_n) begin
+    if (!rst_n) begin
+        for (rr=0; rr<ROW*SUB; rr=rr+1) w_dup[rr] <= {W_WIDTH{1'b0}};
+    end else begin
+        // 동일 weight를 행×소그룹 수만큼 복제(레지스터화)
+        for (rr=0; rr<ROW; rr=rr+1)
+            for (gg=0; gg<SUB; gg=gg+1)
+                w_dup[rr*SUB + gg] <= mul_weight;
+    end
+end
+
+///////////////////////////////////////////////////////
+// 곱 결과 라운드/시프트 후 레지스터
 ///////////////////////////////////////////////////////
 function signed [17:0] round_shift_signed18;
     input signed [34:0] x;
-    reg        sign;
-    reg [34:0] mag;
-    reg [35:0] mag_rnd;
-    reg [17:0] q_u;
+    reg sign; reg [34:0] mag; reg [35:0] mag_rnd; reg [17:0] q_u;
 begin
     sign    = x[34];
-    mag     = sign ? (~x + 35'd1) : x;              // |x|
-    mag_rnd = {1'b0, mag} + (36'd1 << (R_SHIFT-1)); // +0.5LSB
-    q_u     = mag_rnd[35:R_SHIFT];                  // >> R
+    mag     = sign ? (~x + 35'd1) : x;
+    mag_rnd = {1'b0, mag} + (36'd1 << (R_SHIFT-1));
+    q_u     = mag_rnd[35:R_SHIFT];
     round_shift_signed18 = sign ? -$signed(q_u) : $signed(q_u);
 end
 endfunction
 
-///////////////////////////////////////////////////////
-// Pipeline: mul_in (1clk)
-///////////////////////////////////////////////////////
-always @(posedge clk or negedge rst_n) begin
-    if (!rst_n) mul_in_q <= {IO_WIDTH*PIXEL{1'b0}};
-    else        mul_in_q <= mul_in;
-end
+reg  signed [IO_WIDTH-1:0] mul_out_reg [0:PIXEL-1];
+wire signed [34:0]         mul_out_w   [0:PIXEL-1];
 
-///////////////////////////////////////////////////////
-// Pipeline: mul_weight (행 단위로 1clk 복제)
-///////////////////////////////////////////////////////
-integer r;
-always @(posedge clk or negedge rst_n) begin
-    if (!rst_n) begin
-        for (r=0; r<ROW; r=r+1) mul_weight_row_q[r] <= {W_WIDTH{1'b0}};
-    end else begin
-        // 한 사이클에 14개 행 레지스터 모두 동일한 mul_weight 캡처
-        for (r=0; r<ROW; r=r+1) mul_weight_row_q[r] <= mul_weight;
-    end
-end
-// 참고: 필요시 아래와 같이 도와줄 수도 있음 (자동 복제 유도)
-// (* max_fanout = 16 *) wire signed [W_WIDTH-1:0] mul_weight_buf = mul_weight;
-
-///////////////////////////////////////////////////////
-// Register outputs
-///////////////////////////////////////////////////////
 integer k;
 always @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
-        for (k = 0; k < PIXEL; k = k + 1)
-            mul_out_reg[k] <= {IO_WIDTH{1'b0}};
+        for (k=0; k<PIXEL; k=k+1) mul_out_reg[k] <= {IO_WIDTH{1'b0}};
     end else begin
-        for (k = 0; k < PIXEL; k = k + 1)
-            mul_out_reg[k] <= round_shift_signed18(mul_out_w[k]);
+        for (k=0; k<PIXEL; k=k+1) mul_out_reg[k] <= round_shift_signed18(mul_out_w[k]);
     end
 end
 
-///////////////////////////////////////////////////////
-// Pack register array -> bus
-///////////////////////////////////////////////////////
 genvar m;
 generate
-    for (m = 0; m < PIXEL; m = m + 1) begin : OUTPUT_PACK
+    for (m=0; m<PIXEL; m=m+1) begin : PACK
         assign mul_out[IO_WIDTH*(m+1)-1 : IO_WIDTH*m] = mul_out_reg[m];
     end
 endgenerate
 
 ///////////////////////////////////////////////////////
-// MULTIPLIER instantiation (per pixel)
-//   - B 입력은 "행 레지스터"에서만 가져옴 (fan-out ~14)
-//   - A 입력은 mul_in_q에서 픽셀별 슬라이스
+// DSP 인스턴스: B는 복제 레지스터 w_dup 사용(교차-참조 없음)
 ///////////////////////////////////////////////////////
 genvar ry, cx;
 generate
-    for (ry = 0; ry < ROW;    ry = ry + 1) begin : ROWS
-    for (cx = 0; cx < COLUMN; cx = cx + 1) begin : COLS
-        localparam integer IDX = ry*COLUMN + cx;
+    for (ry=0; ry<ROW; ry=ry+1) begin : ROWS
+        for (cx=0; cx<COLUMN; cx=cx+1) begin : COLS
+            localparam integer IDX  = ry*COLUMN + cx;
+            // 열을 SUB개 그룹으로 균등 분할해 선택(정수 상수 → 정적 인덱스)
+            localparam integer GIDX = (cx*SUB)/COLUMN; // 0..SUB-1
 
-        (* use_dsp = "yes" *)
-        mult_gen_0 u_mul (
-            .CLK (clk),
-            .A   ($signed(mul_in_q[IO_WIDTH*(IDX+1)-1 : IO_WIDTH*IDX])),
-            .B   (mul_weight_row_q[ry]),   // 행 단위 1clk 레지스터
-            .P   (mul_out_w[IDX])
-        );
-    end
+            (* use_dsp = "yes" *)
+            mult_gen_0 u_mul (
+                .CLK (clk),
+                .A   ($signed(mul_in_q[IO_WIDTH*(IDX+1)-1 : IO_WIDTH*IDX])),
+                .B   (w_dup[ry*SUB + GIDX]),
+                .P   (mul_out_w[IDX])
+            );
+        end
     end
 endgenerate
 

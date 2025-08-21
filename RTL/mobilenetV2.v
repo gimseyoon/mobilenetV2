@@ -14,13 +14,11 @@ module mobilenetV2 #(
     parameter ADDR_W1_MEM = $clog2(384 * 9)       // 12 (for 9*384 = 3456)
 )(
     //input clk_in,
-    input clk_in,
-    //input clk,
+    input clk,
     input rst_n,
     input start,
     //output reg result_save_valid_o,
     output reg [13: 0] layer_8_result
-
 );
 
 ////////////////////////////////////////////////////////////
@@ -40,7 +38,9 @@ module mobilenetV2 #(
                LAYER_10 = 2'b11;
                
 /////////////////////////////////////////////////////////////
-    wire clk;
+
+
+    //wire clk;
     wire locked;
     reg  new_start;
     wire rst_n_sync;
@@ -184,8 +184,8 @@ module mobilenetV2 #(
     
 ////////////////////////////////////////////////////////////
 // 1-clk pipeline registers for BRAM/param signals
-always @(posedge clk or negedge rst_n) begin
-  if (!rst_n) begin
+always @(posedge clk or negedge rst_n_sync) begin
+  if (!rst_n_sync) begin
     {ena_0_q,wea_0_q,addra_0_q,dina_0_q,enb_0_q,addrb_0_q,
      ena_1_q,wea_1_q,addra_1_q,dina_1_q,enb_1_q,addrb_1_q,
      ena_w0_q,addra_w0_q, ena_w1_q,addra_w1_q,ena_w2_q,addra_w2_q,
@@ -323,6 +323,13 @@ end
 
 
 
+    // start rising-edge ∞À√‚
+    reg start_d;
+    always @(posedge clk or negedge rst_n_sync) begin
+        if (!rst_n_sync) start_d <= 1'b0;
+        else     start_d <= start;
+    end
+    wire start_rise = start & ~start_d;   // 1clk ∆ﬁΩ∫
 
 
 
@@ -342,7 +349,7 @@ reset_sync reset_sync_0(
 FSM FSM_0 (
     .clk                (clk),
     .rst_n              (rst_n_sync),
-    .start              (start),
+    .start              (start_rise),
     .new_start          (new_start),
     .pw_1_bn_relu_done  (pw_1_bn_relu_done),
     .dw_bn_relu_done    (dw_bn_relu_done),
@@ -429,9 +436,6 @@ accumulator accumulator_0 (
 multiplier multiplier_0 (
     .clk                (clk),
     .rst_n              (rst_n_sync),
-    .pw_1_done          (pw_1_done),
-    .dw_done            (dw_done),
-    .pw_2_done          (pw_2_done),
     .mul_in             (mul_in),     
     .mul_weight         (mul_weight),
     .mul_out            (mul_out)
@@ -558,7 +562,7 @@ bram_weight bram_weight_0 (
 );
 /////////////////////////////////////////////////////////////
 
-
+/*
 clk_wiz_0 clk_100_0 (
     // Clock out ports
     .clk_100(clk),     // output clk_100
@@ -570,7 +574,7 @@ clk_wiz_0 clk_100_0 (
 
 
 
-/*
+
 ila_0 ila_0 (
 	.clk(clk), // input wire clk
 	.probe0(start), // input wire [0:0]  probe0  
