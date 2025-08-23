@@ -1,13 +1,13 @@
 `timescale 1ns / 1ps
 
-module mobilenetV2 #(
+module behave_mobilenetV2 #(
     parameter IO_WIDTH = 18,
     parameter ROW = 14,
     parameter COLUMN = 14,
     parameter PIXEL = ROW * COLUMN,              // 14 * 14 = 196
     parameter W_WIDTH = 17,
     parameter INPUT_CHANNEL = 64,
-    parameter ADDR_PARAM = 12,
+    parameter ADDR_PARAM = 10,
     parameter ADDR_IN = $clog2(64),
     parameter ADDR_CHANNEL  = $clog2(384),        // 9 (for CHANNEL = 384)
     parameter ADDR_WMEM = $clog2(384 * 64),       // 15 (for 64*384 = 24576)
@@ -18,8 +18,7 @@ module mobilenetV2 #(
     input rst_n,
     input start,
     output result_save_valid_o,
-    output signed [3527:0] result_o,
-    output reg [13: 0] layer_8_result
+    output signed [3527:0] result_o
 );
 
 
@@ -77,6 +76,7 @@ module mobilenetV2 #(
     wire pw_1_bn_relu_done;
     wire dw_bn_relu_done;
     wire pw_2_bn_done;
+    wire pw_1_addr_valid;
     wire save_valid;
     wire skip_valid;
     
@@ -99,7 +99,7 @@ module mobilenetV2 #(
     assign result_save_valid_o = result_save_valid;
     assign result_o = result;
 //////////////////////////////////////////////////
-// bram_A
+// bram_0
     wire                                        ena_0;
     wire                                        wea_0;
     wire  [ADDR_IN-1:0]                         addra_0;
@@ -107,7 +107,7 @@ module mobilenetV2 #(
     wire                                        enb_0;
     wire  [ADDR_IN-1:0]                         addrb_0;
     wire  signed [IO_WIDTH * PIXEL - 1 : 0]     doutb_0;
-// bram_B
+// bram_1
     wire                                        ena_1;
     wire                                        wea_1;
     wire  [ADDR_CHANNEL-1:0]                    addra_1;
@@ -132,14 +132,27 @@ module mobilenetV2 #(
     
     
 // bram_bias
-    wire                                        ena_biassubam_0;
-    wire    [ADDR_PARAM-1 : 0]                  addra_biassubam_0;
-    wire    signed      [31:0]                  douta_biassubam_0;
+    wire                                        ena_bias_0;
+    wire    [ADDR_PARAM-1 : 0]                  addra_bias_0;
+    wire    signed      [31:0]                  douta_bias_0;
 // bram_mean
+    wire                                        ena_mean_0;
+    wire    [ADDR_PARAM-1 : 0]                  addra_mean_0;
+    wire    signed      [31:0]                  douta_mean_0;
+// bram_std
+    wire                                        ena_std_0;
+    wire    [ADDR_PARAM-1 : 0]                  addra_std_0;
+    wire    signed      [31:0]                  douta_std_0;
+// bram_weight
+    wire                                        ena_weight_0;
+    wire    [ADDR_PARAM-1 : 0]                  addra_weight_0;
+    wire    signed      [31:0]                  douta_weight_0;
+// bram_w_div_std
     wire                                        ena_wdivstd_0;
     wire    [ADDR_PARAM-1 : 0]                  addra_wdivstd_0;
     wire    signed      [31:0]                  douta_wdivstd_0;
     
+
     //////////////////////////////////////////////////
     // bram_q
     reg                                         ena_0_q;
@@ -160,14 +173,18 @@ module mobilenetV2 #(
     reg  [ADDR_W1_MEM-1:0]                      addra_w1_q; 
     reg                                         ena_w2_q;
     reg  [ADDR_WMEM-1:0]                        addra_w2_q; 
-    reg                                         ena_biassubam_0_q;
-    reg  [ADDR_PARAM-1 : 0]                     addra_biassubam_0_q;
+    reg                                         ena_bias_0_q;
+    reg  [ADDR_PARAM-1 : 0]                     addra_bias_0_q;
+    reg                                         ena_mean_0_q;
+    reg  [ADDR_PARAM-1 : 0]                     addra_mean_0_q;
+    reg                                         ena_std_0_q;
+    reg  [ADDR_PARAM-1 : 0]                     addra_std_0_q;
+    reg                                         ena_weight_0_q;
+    reg  [ADDR_PARAM-1 : 0]                     addra_weight_0_q;
     reg                                         ena_wdivstd_0_q;
     reg  [ADDR_PARAM-1 : 0]                     addra_wdivstd_0_q;
     
-    
-    
-    
+
     reg signed [IO_WIDTH -1 : 0] result_1; always@(posedge clk or negedge rst_n_sync) if(!rst_n_sync) result_1 <= 0; else result_1 <= result[IO_WIDTH -1 : 0];
     reg signed [IO_WIDTH -1 : 0] result_2; always@(posedge clk or negedge rst_n_sync) if(!rst_n_sync) result_2 <= 0; else result_2 <= result[2*IO_WIDTH-1 : IO_WIDTH];
     reg signed [IO_WIDTH -1 : 0] result_3; always@(posedge clk or negedge rst_n_sync) if(!rst_n_sync) result_3 <= 0; else result_3 <= result[IO_WIDTH*PIXEL-1-IO_WIDTH -: IO_WIDTH];
@@ -182,36 +199,36 @@ always @(posedge clk or negedge rst_n_sync) begin
     {ena_0_q,wea_0_q,addra_0_q,dina_0_q,enb_0_q,addrb_0_q,
      ena_1_q,wea_1_q,addra_1_q,dina_1_q,enb_1_q,addrb_1_q,
      ena_w0_q,addra_w0_q, ena_w1_q,addra_w1_q,ena_w2_q,addra_w2_q,
-     ena_biassubam_0_q,addra_biassubam_0_q,
-     ena_wdivstd_0_q,addra_wdivstd_0_q} <= 0;
+     ena_bias_0_q,addra_bias_0_q,
+     ena_mean_0_q,addra_mean_0_q,
+     ena_std_0_q,addra_std_0_q,
+     ena_weight_0_q,addra_weight_0_q,
+     ena_wdivstd_0_q,addra_wdivstd_0_q } <= 0;
   end else begin
     {ena_0_q,wea_0_q,addra_0_q,dina_0_q,enb_0_q,addrb_0_q,
      ena_1_q,wea_1_q,addra_1_q,dina_1_q,enb_1_q,addrb_1_q,
      ena_w0_q,addra_w0_q, ena_w1_q,addra_w1_q,ena_w2_q,addra_w2_q,
-     ena_biassubam_0_q,addra_biassubam_0_q,
+     ena_bias_0_q,addra_bias_0_q,
+     ena_mean_0_q,addra_mean_0_q,
+     ena_std_0_q,addra_std_0_q,
+     ena_weight_0_q,addra_weight_0_q,
      ena_wdivstd_0_q,addra_wdivstd_0_q} <=
     {ena_0,wea_0,addra_0,dina_0,enb_0,addrb_0,
      ena_1,wea_1,addra_1,dina_1,enb_1,addrb_1,
      ena_w0,addra_w0, ena_w1,addra_w1,ena_w2,addra_w2,
-     ena_biassubam_0,addra_biassubam_0,
+     ena_bias_0,addra_bias_0,
+     ena_mean_0,addra_mean_0,
+     ena_std_0,addra_std_0,
+     ena_weight_0,addra_weight_0,
      ena_wdivstd_0,addra_wdivstd_0};
   end
 end
 
 
 
-/////////////////////////////////////////////////////////////////////
-/////////////////////////////////////////////////////////////////////
-
-    integer j;
-    always@(posedge clk) begin
-        for (j = 0; j < 14; j = j + 1) begin
-            layer_8_result[j] <= result[(j * 18 * 14) + 17];
-        end  
-    end
-/*
 //////////////////////////////////////////////////
 // new_start ( layer (9, 10) )
+/*
     always@(posedge clk or negedge rst_n) begin
         if(!rst_n) begin
             new_start <= 0;
@@ -225,7 +242,7 @@ end
             end
         end // rst_n
     end //always
-*/
+ */ 
 //////////////////////////////////////////////////
 // sk_in_1, sk_in_2    
     assign sk_in_1 = (skip_valid) ? doutb_0 : 0;
@@ -262,7 +279,7 @@ end
 // ============================================================
 // FANOUT SPLIT for state  (no latency)
 //    - state_buf : keep
-//    - state_row[r] : row ?? ???? (Vivado?? ??? ????????? max_fanout ???)
+//    - state_row[r] : row 별 복제 (Vivado가 자동 복제하도록 max_fanout 힌트)
 // ============================================================
 (* keep = "true" *) wire [2:0] state_buf = state;
 (* max_fanout = 64 *) wire [2:0] state_row [0:ROW-1];
@@ -270,12 +287,12 @@ end
 genvar rr;
 generate
   for (rr=0; rr<ROW; rr=rr+1) begin : STATE_FANOUT_SPLIT
-    assign state_row[rr] = state_buf; // ???? ????? ????(???? ????)
+    assign state_row[rr] = state_buf; // 동일 사이클 전달(지연 없음)
   end
 endgenerate
 
 // ============================================================
-// decide multiplier input  (row???? select ?? ????/?????? ???)
+// decide multiplier input  (row별로 select → 팬아웃/배선길이 축소)
 // ============================================================
 integer k;
 always @(posedge clk or negedge rst_n_sync) begin
@@ -283,7 +300,7 @@ always @(posedge clk or negedge rst_n_sync) begin
     mul_in     <= 0;
     mul_weight <= 0;
   end else begin
-    // ?????? ???(row?? case)
+    // 데이터 입력(row별 case)
     for (k = 0; k < PIXEL; k = k + 1) begin : MULIN_UPDATE
       case (state_row[k/14])
         PW_1: mul_in[IO_WIDTH*(k+1)-1 -: IO_WIDTH] <= doutb_0[IO_WIDTH*(k+1)-1 -: IO_WIDTH];
@@ -293,7 +310,7 @@ always @(posedge clk or negedge rst_n_sync) begin
       endcase
     end
 
-    // weight ????(???? ???? ???? select ????)
+    // weight 선택(팬아웃 작아서 단일 select 유지)
     case (state_buf)
       PW_1: mul_weight <= douta_w0;
       DW  : mul_weight <= douta_w1;
@@ -305,13 +322,13 @@ end
 
 
 
-    // start rising-edge ????
+    // start rising-edge 검출
     reg start_d;
     always @(posedge clk or negedge rst_n_sync) begin
         if (!rst_n_sync) start_d <= 1'b0;
         else     start_d <= start;
     end
-    wire start_rise = start & ~start_d;   // 1clk ???
+    wire start_rise = start & ~start_d;   // 1clk 펄스
 
 
 
@@ -347,8 +364,8 @@ FSM FSM_0 (
 glbl_ctrl glbl_ctrl_0 (
     .clk                (clk),
     .rst_n              (rst_n_sync),
-    .layer_state        (layer_state),
     .state              (state),
+    .pw_1_addr_valid    (pw_1_addr_valid),
     .save_valid         (save_valid),
     .skip_valid         (skip_valid),
     .acc_out            (acc_out),
@@ -379,13 +396,24 @@ glbl_ctrl glbl_ctrl_0 (
     .ena_w2             (ena_w2),
     .addra_w2           (addra_w2),
     
+    
 // BRAM bias
-    .ena_biassubam_0    (ena_biassubam_0),
-    .addra_biassubam_0  (addra_biassubam_0),
+    .ena_bias_0         (ena_bias_0),
+    .addra_bias_0       (addra_bias_0),
 // BRAM mean
-    .ena_wdivstd_0      (ena_wdivstd_0),
-    .addra_wdivstd_0    (addra_wdivstd_0)
+    .ena_mean_0         (ena_mean_0),
+    .addra_mean_0       (addra_mean_0),
+// BRAM std
+    .ena_std_0          (ena_std_0),
+    .addra_std_0        (addra_std_0),
+// BRAM weight
+    .ena_weight_0       (ena_weight_0),
+    .addra_weight_0     (addra_weight_0),
+// BRAM w_div_std
+    .ena_wdivstd_0       (ena_wdivstd_0),
+    .addra_wdivstd_0     (addra_wdivstd_0)
 );
+
 
 
 
@@ -427,10 +455,14 @@ BN_RELU BN_RELU_0 (
     .dw_valid           (dw_valid),
     .pw_2_valid         (pw_2_valid),
     .bn_en              (bn_en),
+    .mean               (douta_mean_0),
+    .weight             (douta_weight_0),
+    .bias               (douta_bias_0),
+    .std                (douta_std_0),
     .wdivstd            (douta_wdivstd_0),
-    .biassubam          (douta_biassubam_0),
     .acc_out            (acc_out), 
     .bn_relu_out        (bn_relu_out), 
+    .pw_1_addr_valid    (pw_1_addr_valid),
     .save_valid         (save_valid),
     .skip_valid         (skip_valid),
     .pw_1_bn_relu_done  (pw_1_bn_relu_done),
@@ -468,7 +500,7 @@ bram_A bram_A (
   .doutb                (doutb_0)  // output wire [3527 : 0] doutb
 );
 // BRAM_B
-blk_mem_gen_1 bram_B (
+bram_B bram_B (
   .clka                 (clk),          // input wire clka
   .ena                  (ena_1_q),        // input wire ena
   .wea                  (wea_1_q),        // input wire [0 : 0] wea
@@ -482,7 +514,7 @@ blk_mem_gen_1 bram_B (
 
 //////////////////////////////////////////////////////////
 // BRAM_W0 (Pointwise_1 Weight)
-blk_mem_gen_2 bram_w0 (
+bram_W0 bram_w0 (
   .clka                 (clk),          // input wire clka
   .ena                  (ena_w0_q),       // input wire ena
   .addra                (addra_w0_q),     // input wire [14 : 0] addra
@@ -490,7 +522,7 @@ blk_mem_gen_2 bram_w0 (
 );
 
 // BRAM_W1 (Depthwise Weight)
-blk_mem_gen_3 bram_w1 (
+bram_W1 bram_w1 (
   .clka                 (clk),          // input wire clka
   .ena                  (ena_w1_q),       // input wire ena
   .addra                (addra_w1_q),     // input wire [11 : 0] addra
@@ -499,7 +531,7 @@ blk_mem_gen_3 bram_w1 (
 
 
 // BRAM_W2 (Pointwise_2 Weight)
-blk_mem_gen_4 bram_w2 (
+bram_W2 bram_w2 (
   .clka                 (clk),          // input wire clka
   .ena                  (ena_w2_q),       // input wire ena
   .addra                (addra_w2_q),     // input wire [14 : 0] addra
@@ -507,12 +539,32 @@ blk_mem_gen_4 bram_w2 (
 );
 ///////////////////////////////////////////////////////////////
 // bram_PARAMETER 
-
-bram_bias_sub_am bram_bias_sub_am_0 (
+bram_bias bram_bias_0 (
   .clka(clk),    // input wire clka
-  .ena(ena_biassubam_0_q),      // input wire ena
-  .addra(addra_biassubam_0_q),  // input wire [9 : 0] addra
-  .douta(douta_biassubam_0)  // output wire [31 : 0] douta
+  .ena(ena_bias_0_q),      // input wire ena
+  .addra(addra_bias_0_q),  // input wire [9 : 0] addra
+  .douta(douta_bias_0)  // output wire [31 : 0] douta
+);
+
+bram_mean bram_mean_0 (
+  .clka(clk),    // input wire clka
+  .ena(ena_mean_0_q),      // input wire ena
+  .addra(addra_mean_0_q),  // input wire [9 : 0] addra
+  .douta(douta_mean_0)  // output wire [31 : 0] douta
+);
+
+bram_std bram_std_0 (
+  .clka(clk),    // input wire clka
+  .ena(ena_std_0_q),      // input wire ena
+  .addra(addra_std_0_q),  // input wire [9 : 0] addra
+  .douta(douta_std_0)  // output wire [31 : 0] douta
+);
+
+bram_weight bram_weight_0 (
+  .clka(clk),    // input wire clka
+  .ena(ena_weight_0_q),      // input wire ena
+  .addra(addra_weight_0_q),  // input wire [9 : 0] addra
+  .douta(douta_weight_0)  // output wire [31 : 0] douta
 );
 
 bram_w_div_std bram_w_div_std_0 (

@@ -34,10 +34,8 @@ module enable_counter #(
     output reg                  ena_w2,
 
     // BN Parameters BRAM
-    output reg                  ena_bias_0,
-    output reg                  ena_mean_0,
-    output reg                  ena_std_0,
-    output reg                  ena_weight_0
+    output reg                  ena_biassubam_0,
+    output reg                  ena_wdivstd_0
 );
 
 ///////////////////////////////////////////////////////
@@ -55,7 +53,7 @@ localparam IDLE     = 3'b000,
 ///////////////////////////////////////////////////////
 // Pulse generator params for enb_0 during PW_2
 ///////////////////////////////////////////////////////
-localparam [14:0] START   = 15'd487;   // first trigger
+localparam [14:0] START   = 15'd450;   // first trigger
 localparam [8:0]  PERIOD  = 9'd384;    // interval
 localparam [8:0]  HIGHLEN = 9'd2;      // high length (2 clocks)
 localparam [6:0]  REPEAT  = 7'd64;     // total pulses
@@ -98,23 +96,17 @@ end
 
 always@(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
-        ena_bias_0   <= 1'b0;
-        ena_mean_0   <= 1'b0;
-        ena_std_0    <= 1'b0;
-        ena_weight_0 <= 1'b0;
+        ena_biassubam_0     <= 0;
+        ena_wdivstd_0       <= 0;
     end
     else begin
         // BN param enable window
         if (state == IDLE) begin
-            ena_bias_0   <= 1'b0;
-            ena_mean_0   <= 1'b0;
-            ena_std_0    <= 1'b0;
-            ena_weight_0 <= 1'b0;
+        ena_biassubam_0     <= 0;
+        ena_wdivstd_0       <= 0;
         end else begin
-            ena_bias_0   <= 1'b1;
-            ena_mean_0   <= 1'b1;
-            ena_std_0    <= 1'b1;
-            ena_weight_0 <= 1'b1;
+        ena_biassubam_0     <= 1;
+        ena_wdivstd_0       <= 1;
         end
     end
 end

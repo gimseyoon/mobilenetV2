@@ -7,7 +7,7 @@ module addr_counter #(
     parameter PIXEL = ROW * COLUMN,              // 14 * 14 = 196
     parameter W_WIDTH = 17,
     parameter INPUT_CHANNEL = 64,
-    parameter ADDR_PARAM = 10,
+    parameter ADDR_PARAM = 12,
     parameter ADDR_IN = $clog2(64),
     parameter ADDR_CHANNEL  = $clog2(384),        // 9 (for CHANNEL = 384)
     parameter ADDR_WMEM = $clog2(384 * 64),       // 15 (for 64*384 = 24576)
@@ -16,6 +16,7 @@ module addr_counter #(
     input                           clk,
     input                           rst_n,
     input         [2:0]             state,
+    input         [1:0]             layer_state,
     input                           save_valid,
     input                           skip_valid,
     input                           result_save_valid,
@@ -39,10 +40,8 @@ module addr_counter #(
     output reg    [ADDR_WMEM-1:0]     addra_w2,
 
     // BN params
-    output reg    [ADDR_PARAM-1:0]    addra_bias_0,
-    output reg    [ADDR_PARAM-1:0]    addra_mean_0,
-    output reg    [ADDR_PARAM-1:0]    addra_std_0,
-    output reg    [ADDR_PARAM-1:0]    addra_weight_0
+    output reg    [ADDR_PARAM-1:0]    addra_biassubam_0,
+    output reg    [ADDR_PARAM-1:0]    addra_wdivstd_0
 );
 
 ///////////////////////////////////////////////////////
@@ -57,9 +56,20 @@ localparam IDLE       = 3'b000,
            PW_2_RST   = 3'b110,
            EXPORT     = 3'b111;
 
-localparam [ADDR_PARAM-1:0] DW_OFFSET   = 10'd384;
-localparam [ADDR_PARAM-1:0] PW_2_OFFSET = 10'd768;
-
+localparam READY    = 2'b00,
+           LAYER_8  = 2'b01,
+           LAYER_9  = 2'b10,
+           LAYER_10 = 2'b11;
+           
+localparam [ADDR_PARAM-1:0] LAYER_8_PW_1_OFFSET  = 12'd0;
+localparam [ADDR_PARAM-1:0] LAYER_8_DW_OFFSET    = 12'd384;
+localparam [ADDR_PARAM-1:0] LAYER_8_PW_2_OFFSET  = 12'd768;
+localparam [ADDR_PARAM-1:0] LAYER_9_PW_1_OFFSET  = 12'd832;
+localparam [ADDR_PARAM-1:0] LAYER_9_DW_OFFSET    = 12'd1216;
+localparam [ADDR_PARAM-1:0] LAYER_9_PW_2_OFFSET  = 12'd1600;
+localparam [ADDR_PARAM-1:0] LAYER_10_PW_1_OFFSET = 12'd1664;
+localparam [ADDR_PARAM-1:0] LAYER_10_DW_OFFSET   = 12'd2048;
+localparam [ADDR_PARAM-1:0] LAYER_10_PW_2_OFFSET = 12'd2432;
 ///////////////////////////////////////////////////////
 // Registers
 ///////////////////////////////////////////////////////
@@ -83,6 +93,9 @@ always @(posedge clk or negedge rst_n) begin
             cnt <= 15'd0;
     end
 end
+
+
+
 ///////////////////////////////////////////////////////
 // Sequential: address generation
 ///////////////////////////////////////////////////////
@@ -99,10 +112,8 @@ always @(posedge clk or negedge rst_n) begin
         addra_w1       <= 0;
         addra_w2       <= 0;
                           
-        addra_bias_0   <= 0;  // 1023
-        addra_mean_0   <= 0;
-        addra_std_0    <= 0;
-        addra_weight_0 <= 0;
+        addra_biassubam_0   <= 0;
+        addra_wdivstd_0     <= 0;
 
         mean_run       <= 1'b0;  std_run   <= 1'b0;  weight_run <= 1'b0;  bias_run <= 1'b0;
         mean_phase     <= 6'd0;  std_phase <= 6'd0;  weight_phase<= 6'd0; bias_phase<= 6'd0;
@@ -126,11 +137,18 @@ always @(posedge clk or negedge rst_n) begin
                 addra_w0        <= 0;
                 addra_w1        <= 0;
                 addra_w2        <= 0;
-                                   
-                addra_bias_0    <= 0;
-                addra_mean_0    <= 0;
-                addra_std_0     <= 0;
-                addra_weight_0  <= 0;
+                if(layer_state == LAYER_8) begin
+                    addra_biassubam_0 <= 0;
+                    addra_wdivstd_0   <= 0;
+                end
+                else if(layer_state == LAYER_9) begin
+                    addra_biassubam_0 <= LAYER_9_PW_1_OFFSET;
+                    addra_wdivstd_0   <= LAYER_9_PW_1_OFFSET;      
+                end
+                else if(layer_state == LAYER_10) begin
+                    addra_biassubam_0 <= LAYER_10_PW_1_OFFSET;
+                    addra_wdivstd_0   <= LAYER_10_PW_1_OFFSET;      
+                end
             end
 
             ///////////////////////////////////////////////////////
@@ -156,66 +174,10 @@ always @(posedge clk or negedge rst_n) begin
                     pw_1_read_done <= 1;
                 end
                 
-                if (save_valid)
+                if (save_valid) begin
                     addra_1 <= addra_1 + 1'b1;
-            
-                // -------------------------------------------------
-                // BN params (PW_1): base ??╱????▽﹉ ??? ?＝? 64??╞??〝 ?????
-                //   - mean  : cnt == 105 -> ??５??走 clk?-? 1?????, ??╞??? ?＝? 64??╞??〝
-                //   - std   : cnt == 116 -> ??５??走 clk?-? 1?????, ??╞??? ?＝? 64??╞??〝
-                //   - weight: cnt == 144 -> ??５??走 clk?-? 1?????, ??╞??? ?＝? 64??╞??〝
-                //   - bias  : cnt == 152 -> ??５??走 clk?-? 1?????, ??╞??? ?＝? 64??╞??〝
-                // -------------------------------------------------
-                // mean
-                if (cnt == 15'd106) begin
-                    mean_run   <= 1'b1;
-                    mean_phase <= 6'd63;           
-                end else if (mean_run) begin
-                    if (mean_phase == 6'd63) begin
-                        addra_mean_0 <= addra_mean_0 + 1'b1;
-                        mean_phase   <= 6'd0;
-                    end else begin
-                        mean_phase   <= mean_phase + 1'b1;
-                    end
-                end
-            
-                // std
-                if (cnt == 15'd117) begin
-                    std_run    <= 1'b1;
-                    std_phase  <= 6'd63;
-                end else if (std_run) begin
-                    if (std_phase == 6'd63) begin
-                        addra_std_0 <= addra_std_0 + 1'b1;
-                        std_phase   <= 6'd0;
-                    end else begin
-                        std_phase   <= std_phase + 1'b1;
-                    end
-                end
-            
-                // weight
-                if (cnt == 15'd145) begin
-                    weight_run   <= 1'b1;
-                    weight_phase <= 6'd63;
-                end else if (weight_run) begin
-                    if (weight_phase == 6'd63) begin
-                        addra_weight_0 <= addra_weight_0 + 1'b1;
-                        weight_phase   <= 6'd0;
-                    end else begin
-                        weight_phase   <= weight_phase + 1'b1;
-                    end
-                end
-            
-                // bias
-                if (cnt == 15'd153) begin
-                    bias_run   <= 1'b1;
-                    bias_phase <= 6'd63;
-                end else if (bias_run) begin
-                    if (bias_phase == 6'd63) begin
-                        addra_bias_0 <= addra_bias_0 + 1'b1;
-                        bias_phase   <= 6'd0;
-                    end else begin
-                        bias_phase   <= bias_phase + 1'b1;
-                    end
+                    addra_biassubam_0   <= addra_biassubam_0 + 1;
+                    addra_wdivstd_0     <= addra_wdivstd_0 + 1;
                 end
             end // PW_1
 
@@ -223,12 +185,21 @@ always @(posedge clk or negedge rst_n) begin
             // PW_1_RST
             ///////////////////////////////////////////////////////
             PW_1_RST: begin
-                addra_1        <= {ADDR_CHANNEL{1'b0}};
-                addra_bias_0   <= DW_OFFSET;
-                addra_mean_0   <= DW_OFFSET;
-                addra_std_0    <= DW_OFFSET;
-                addra_weight_0 <= DW_OFFSET;
-
+                addra_1             <= 0;      
+                
+                if(layer_state == LAYER_8) begin
+                    addra_biassubam_0 <= LAYER_8_DW_OFFSET;
+                    addra_wdivstd_0   <= LAYER_8_DW_OFFSET;
+                end
+                else if(layer_state == LAYER_9) begin
+                    addra_biassubam_0 <= LAYER_9_DW_OFFSET;
+                    addra_wdivstd_0   <= LAYER_9_DW_OFFSET;      
+                end
+                else if(layer_state == LAYER_10) begin
+                    addra_biassubam_0 <= LAYER_10_DW_OFFSET;
+                    addra_wdivstd_0   <= LAYER_10_DW_OFFSET;      
+                end
+                
                 mean_run<=1'b0; std_run<=1'b0; weight_run<=1'b0; bias_run<=1'b0;
                 mean_phase<=6'd0; std_phase<=6'd0; weight_phase<=6'd0; bias_phase<=6'd0;
             end
@@ -267,51 +238,31 @@ always @(posedge clk or negedge rst_n) begin
                 
                 if (save_valid)
                     addra_1 <= addra_1 + 1'b1;  
-
+                    
+                // std: base=46, every 15
+                if (cnt == 15'd51) begin
+                    addra_wdivstd_0 <= addra_wdivstd_0 + 1'b1; std_run<=1'b1; std_phase<=4'd0;
+                end else if (std_run) begin
+                    if (std_phase == 6'd28) begin
+                        addra_wdivstd_0 <= addra_wdivstd_0 + 1'b1; std_phase <= 4'd0;
+                    end else begin
+                        std_phase <= std_phase + 1'b1;
+                    end
+                end
+                
                 // mean: base=35+1, every 15
-                if (cnt == 15'd50) begin
-                    addra_mean_0 <= addra_mean_0 + 1'b1; mean_run<=1'b1; mean_phase<=6'd0;
+                if (cnt == 15'd59) begin
+                    addra_biassubam_0 <= addra_biassubam_0 + 1'b1; mean_run<=1'b1; mean_phase<=6'd0;
                 end else if (mean_run) begin
                     if (mean_phase == 6'd28) begin
-                        addra_mean_0 <= addra_mean_0 + 1'b1; mean_phase <= 6'd0;
+                        addra_biassubam_0 <= addra_biassubam_0 + 1'b1; mean_phase <= 6'd0;
                     end else begin
                         mean_phase <= mean_phase + 6'b1;
                     end
                 end
 
-                // std: base=46, every 15
-                if (cnt == 15'd61) begin
-                    addra_std_0 <= addra_std_0 + 1'b1; std_run<=1'b1; std_phase<=4'd0;
-                end else if (std_run) begin
-                    if (std_phase == 6'd28) begin
-                        addra_std_0 <= addra_std_0 + 1'b1; std_phase <= 4'd0;
-                    end else begin
-                        std_phase <= std_phase + 1'b1;
-                    end
-                end
 
-                // weight: base=74, every 15
-                if (cnt == 15'd89) begin
-                    addra_weight_0 <= addra_weight_0 + 1'b1; weight_run<=1'b1; weight_phase<=4'd0;
-                end else if (weight_run) begin
-                    if (weight_phase == 6'd28) begin
-                        addra_weight_0 <= addra_weight_0 + 1'b1; weight_phase <= 4'd0;
-                    end else begin
-                        weight_phase <= weight_phase + 1'b1;
-                    end
-                end
-
-                // bias: base=82, every 15
-                if (cnt == 15'd97) begin
-                    addra_bias_0 <= addra_bias_0 + 1'b1; bias_run<=1'b1; bias_phase<=4'd0;
-                end else if (bias_run) begin
-                    if (bias_phase == 6'd28) begin
-                        addra_bias_0 <= addra_bias_0 + 1'b1; bias_phase <= 4'd0;
-                    end else begin
-                        bias_phase <= bias_phase + 1'b1;
-                    end
-                end
-            end
+            end // DW
 
             ///////////////////////////////////////////////////////
             // DW_RST
@@ -319,10 +270,19 @@ always @(posedge clk or negedge rst_n) begin
             DW_RST: begin
                 addrb_0        <= {INPUT_CHANNEL{1'b0}};
                 addra_1        <= {ADDR_CHANNEL{1'b0}};
-                addra_bias_0   <= PW_2_OFFSET;
-                addra_mean_0   <= PW_2_OFFSET;
-                addra_std_0    <= PW_2_OFFSET;
-                addra_weight_0 <= PW_2_OFFSET;
+                
+                if(layer_state == LAYER_8) begin
+                    addra_biassubam_0 <= LAYER_8_PW_2_OFFSET;
+                    addra_wdivstd_0   <= LAYER_8_PW_2_OFFSET;
+                end
+                else if(layer_state == LAYER_9) begin
+                    addra_biassubam_0 <= LAYER_9_PW_2_OFFSET;
+                    addra_wdivstd_0   <= LAYER_9_PW_2_OFFSET;      
+                end
+                else if(layer_state == LAYER_10) begin
+                    addra_biassubam_0 <= LAYER_10_PW_2_OFFSET;
+                    addra_wdivstd_0   <= LAYER_10_PW_2_OFFSET;      
+                end
 
                 mean_run<=1'b0; std_run<=1'b0; weight_run<=1'b0; bias_run<=1'b0;
                 mean_phase<=6'd0; std_phase<=6'd0; weight_phase<=6'd0; bias_phase<=6'd0;
@@ -356,10 +316,8 @@ always @(posedge clk or negedge rst_n) begin
                 // PW2 uses skip_valid
                 if (result_save_valid) begin
                     addra_0        <= addra_0 + 1'b1;
-                    addra_bias_0   <= addra_bias_0   + 1'b1;
-                    addra_mean_0   <= addra_mean_0   + 1'b1;
-                    addra_std_0    <= addra_std_0    + 1'b1;
-                    addra_weight_0 <= addra_weight_0 + 1'b1;
+                    addra_biassubam_0   <= addra_biassubam_0 + 1;
+                    addra_wdivstd_0     <= addra_wdivstd_0 + 1;
                 end
 
                 // addrb_0++ on enb_0 falling edge (64 times total)
@@ -379,7 +337,7 @@ always @(posedge clk or negedge rst_n) begin
             ///////////////////////////////////////////////////////
             default: begin
                 pw_1_read_done <= 0;
-                dw_read_done <= 0;
+                dw_read_done   <= 0;
                 pw_2_read_done <= 0;
                 dw_cnt         <= 0;
                 addra_0        <= 0;
@@ -389,10 +347,8 @@ always @(posedge clk or negedge rst_n) begin
                 addra_w0       <= 0;
                 addra_w1       <= 0;
                 addra_w2       <= 0;
-                addra_bias_0   <= 0;
-                addra_mean_0   <= 0;
-                addra_std_0    <= 0;
-                addra_weight_0 <= 0;
+                addra_biassubam_0   <= 0;
+                addra_wdivstd_0     <= 0;
             end
         endcase
     end

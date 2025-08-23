@@ -52,14 +52,13 @@ end
 // Next-state combinational logic
 ///////////////////////////////////////////////////////
 always @(*) begin
-    next_state = state;
     case (state)
-        IDLE:     if (start || new_start)   next_state = PW_1;
-        PW_1:     if (pw_1_bn_relu_done)    next_state = PW_1_RST;
+        IDLE:     if (start || new_start)   next_state = PW_1; else next_state = next_state;
+        PW_1:     if (pw_1_bn_relu_done)    next_state = PW_1_RST; else next_state = next_state;
         PW_1_RST:                           next_state = DW;
-        DW:       if (dw_bn_relu_done)      next_state = DW_RST;
+        DW:       if (dw_bn_relu_done)      next_state = DW_RST; else next_state = next_state;
         DW_RST:                             next_state = PW_2;
-        PW_2:     if (skip_done)            next_state = IDLE;
+        PW_2:     if (skip_done)            next_state = IDLE; else next_state = next_state;
         /*
         PW_2_RST:                           next_state = EXPORT;
         EXPORT:   if (export_done)          next_state = IDLE;
@@ -69,12 +68,11 @@ always @(*) begin
 end
 
 always @(*) begin
-    next_layer_state = layer_state;
     case (layer_state)
-        READY:       if (start || new_start)    next_layer_state = LAYER_8;
-        LAYER_8:     if (new_start)             next_layer_state = LAYER_9;
-        LAYER_9:     if (new_start)             next_layer_state = LAYER_10;
-        LAYER_10:    if (new_start)             next_layer_state = READY;
+        READY:       if (start || new_start)    next_layer_state = LAYER_8; else next_layer_state = next_layer_state; 
+        LAYER_8:     if (new_start)             next_layer_state = LAYER_9; else next_layer_state = next_layer_state; 
+        LAYER_9:     if (new_start)             next_layer_state = LAYER_10; else next_layer_state = next_layer_state; 
+        LAYER_10:    if (new_start)             next_layer_state = READY; else next_layer_state = next_layer_state; 
 
         default: next_layer_state = READY;
     endcase

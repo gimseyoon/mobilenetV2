@@ -1,6 +1,6 @@
 // multiplier
-// - 18b × [196] mul_in 을 17b weight와 곱해 18b로 round+shift
-// - weight는 행/소그룹 단위로 레지스터 복제해 fanout과 net delay 완화
+// - 18b ?? [196] mul_in ?? 17b weight?? ???? 18b?? round+shift
+// - weight?? ??/???? ?????? ???????? ?????? fanout?? net delay ???
 `timescale 1ns / 1ps
 
 module multiplier #(
@@ -10,7 +10,7 @@ module multiplier #(
     parameter PIXEL           = ROW * COLUMN,   // 196
     parameter W_WIDTH         = 17,
     parameter integer R_SHIFT = 16,
-    // 한 행을 SUB개 소그룹으로 나눠 weight 레지스터 복제 (1,2,4…)
+    // ?? ???? SUB?? ???????? ???? weight ???????? ???? (1,2,4??)
     parameter integer SUB     = 2
 )(
     input                               clk,
@@ -21,7 +21,7 @@ module multiplier #(
 );
 
 ///////////////////////////////////////////////////////
-// 입력 1clk 파이프라인
+// ??? 1clk ??????????
 ///////////////////////////////////////////////////////
 reg signed [IO_WIDTH*PIXEL-1:0] mul_in_q;
 always @(posedge clk or negedge rst_n)
@@ -29,7 +29,7 @@ always @(posedge clk or negedge rst_n)
     else        mul_in_q <= mul_in;
 
 ///////////////////////////////////////////////////////
-// weight 복제 레지스터 (평면 1D 배열: 인덱스 = 행*SUB + 그룹)
+// weight ???? ???????? (??? 1D ?迭: ?ε??? = ??*SUB + ???)
 ///////////////////////////////////////////////////////
 (* DONT_TOUCH = "true" *)
 reg signed [W_WIDTH-1:0] w_dup [0:ROW*SUB-1];
@@ -39,7 +39,7 @@ always @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
         for (rr=0; rr<ROW*SUB; rr=rr+1) w_dup[rr] <= {W_WIDTH{1'b0}};
     end else begin
-        // 동일 weight를 행×소그룹 수만큼 복제(레지스터화)
+        // ???? weight?? ?????? ????? ????(?????????)
         for (rr=0; rr<ROW; rr=rr+1)
             for (gg=0; gg<SUB; gg=gg+1)
                 w_dup[rr*SUB + gg] <= mul_weight;
@@ -47,7 +47,7 @@ always @(posedge clk or negedge rst_n) begin
 end
 
 ///////////////////////////////////////////////////////
-// 곱 결과 라운드/시프트 후 레지스터
+// ?? ??? ????/????? ?? ????????
 ///////////////////////////////////////////////////////
 function signed [17:0] round_shift_signed18;
     input signed [34:0] x;
@@ -81,14 +81,14 @@ generate
 endgenerate
 
 ///////////////////////////////////////////////////////
-// DSP 인스턴스: B는 복제 레지스터 w_dup 사용(교차-참조 없음)
+// DSP ?ν????: B?? ???? ???????? w_dup ???(????-???? ????)
 ///////////////////////////////////////////////////////
 genvar ry, cx;
 generate
     for (ry=0; ry<ROW; ry=ry+1) begin : ROWS
         for (cx=0; cx<COLUMN; cx=cx+1) begin : COLS
             localparam integer IDX  = ry*COLUMN + cx;
-            // 열을 SUB개 그룹으로 균등 분할해 선택(정수 상수 → 정적 인덱스)
+            // ???? SUB?? ??????? ??? ?????? ????(???? ??? ?? ???? ?ε???)
             localparam integer GIDX = (cx*SUB)/COLUMN; // 0..SUB-1
 
             (* use_dsp = "yes" *)

@@ -7,7 +7,7 @@ module glbl_ctrl #(
     parameter PIXEL          = ROW * COLUMN,              // 14 * 14 = 196
     parameter W_WIDTH        = 17,
     parameter INPUT_CHANNEL  = 64,
-    parameter ADDR_PARAM     = 10,
+    parameter ADDR_PARAM     = 12,
     parameter ADDR_CHANNEL   = $clog2(384),               // 9 (for CHANNEL = 384)
     parameter ADDR_WMEM      = $clog2(384 * 64),          // 15 (for 64*384 = 24576)
     parameter ADDR_W1_MEM    = $clog2(384 * 9)            // 12 (for 9*384 = 3456)
@@ -15,6 +15,7 @@ module glbl_ctrl #(
     input                                   clk,
     input                                   rst_n,
     input           [2:0]                   state,
+    input           [1:0]                   layer_state,
     input                                   save_valid,
     input                                   skip_valid,
     input   signed  [IO_WIDTH*PIXEL-1:0]    acc_out,
@@ -54,14 +55,10 @@ module glbl_ctrl #(
     /////////////////////////////////////////////////////// 
     // BN parameter BRAMs
     ///////////////////////////////////////////////////////
-    output                                  ena_bias_0,
-    output          [ADDR_PARAM-1:0]        addra_bias_0,
-    output                                  ena_mean_0,
-    output          [ADDR_PARAM-1:0]        addra_mean_0,
-    output                                  ena_std_0,
-    output          [ADDR_PARAM-1:0]        addra_std_0,
-    output                                  ena_weight_0,
-    output          [ADDR_PARAM-1:0]        addra_weight_0
+    output                                  ena_biassubam_0,
+    output          [ADDR_PARAM-1:0]        addra_biassubam_0,
+    output                                  ena_wdivstd_0,
+    output          [ADDR_PARAM-1:0]        addra_wdivstd_0
 );
 
 /////////////////////////////////////////////////////// 
@@ -75,11 +72,16 @@ localparam IDLE     = 3'b000,
            PW_2     = 3'b101,
            PW_2_RST = 3'b110,
            SK       = 3'b111;
-
+           
+localparam READY    = 2'b00,
+           LAYER_8  = 2'b01,
+           LAYER_9  = 2'b10,
+           LAYER_10 = 2'b11;
 /////////////////////////////////////////////////////// 
 // Global counter (0..32767)
 ///////////////////////////////////////////////////////
 reg  [2:0] local_state;
+reg  [1:0] local_layer_state;
 wire pw_1_read_done;
 wire dw_read_done;
 wire pw_2_read_done;
@@ -91,8 +93,10 @@ wire pw_2_read_done;
 always @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
         local_state <= 0;
+        local_layer_state <= 0;
     end else begin
         local_state <= state;
+        local_layer_state <= layer_state;
     end
 end
 
@@ -106,6 +110,7 @@ addr_counter addr_counter_0 (
     .clk                (clk),
     .rst_n              (rst_n),
     .state              (local_state),
+    .layer_state        (local_layer_state),
     .save_valid         (save_valid),
     .skip_valid         (skip_valid),
     .result_save_valid (result_save_valid),
@@ -123,12 +128,9 @@ addr_counter addr_counter_0 (
     .addra_w0           (addra_w0),
     .addra_w1           (addra_w1),
     .addra_w2           (addra_w2),
-    .addra_bias_0       (addra_bias_0),
-    .addra_mean_0       (addra_mean_0),
-    .addra_std_0        (addra_std_0),
-    .addra_weight_0     (addra_weight_0)
+    .addra_biassubam_0  (addra_biassubam_0),
+    .addra_wdivstd_0    (addra_wdivstd_0)
 );
-
 /////////////////////////////////////////////////////// 
 // enable_counter
 ///////////////////////////////////////////////////////
@@ -154,10 +156,8 @@ enable_counter enable_counter_0 (
     .ena_w1             (ena_w1),
     .ena_w2             (ena_w2),
 
-    .ena_bias_0         (ena_bias_0),
-    .ena_mean_0         (ena_mean_0),
-    .ena_std_0          (ena_std_0),
-    .ena_weight_0       (ena_weight_0)
+    .ena_biassubam_0  (ena_biassubam_0),
+    .ena_wdivstd_0    (ena_wdivstd_0)
 );
 
 endmodule

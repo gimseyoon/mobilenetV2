@@ -16,10 +16,8 @@ module BN_RELU #(
     input                                   dw_valid,
     input                                   pw_2_valid,
     input                                   bn_en,
-    input   signed  [31:0]                  mean,
-    input   signed  [31:0]                  weight,
-    input   signed  [31:0]                  bias,
-    input   signed  [31:0]                  std,
+    input   signed  [31:0]                  biassubam,
+    input   signed  [31:0]                  wdivstd,
     input   signed  [IO_WIDTH*PIXEL-1:0]    acc_out,        // [3528-1 : 0]
     output  signed  [IO_WIDTH*PIXEL-1:0]    bn_relu_out,    // [3528-1 : 0]
     output  reg                             save_valid,
@@ -83,11 +81,11 @@ always @(posedge clk or negedge rst_n) begin
         save_valid      <= 1'b0;
         skip_valid      <= 1'b0;
     end else begin
-        // bn_cnt : bn_en 동안 0..27 순환
+        // bn_cnt : bn_en ???? 0..27 ???
         if (bn_cnt == 5'd27)      bn_cnt <= 5'd0;
         else if (bn_en)           bn_cnt <= bn_cnt + 1'b1;
 
-        // bn_save_cnt : bn_valid일 때만 0..13 순환, 아니면 0
+        // bn_save_cnt : bn_valid?? ???? 0..13 ???, ???? 0
         if (bn_valid) begin
             if (bn_save_cnt == 5'd27) bn_save_cnt <= 5'd0;
             else                       bn_save_cnt <= bn_save_cnt + 1'b1;
@@ -154,7 +152,7 @@ generate
 endgenerate
 
 /////////////////////////////////////////////////////// 
-// Channel number (0..383) : 한 줄 저장 종료마다 +1
+// Channel number (0..383) : ?? ?? ???? ?????? +1
 ///////////////////////////////////////////////////////
 always @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
@@ -214,19 +212,18 @@ end
 genvar p;
 generate
     for (p = 0; p < 7; p = p + 1) begin : BN_UNIT
-        BN_RELU_SINGLE #(.IO_WIDTH(IO_WIDTH)) u_bn (
+        NEW_BN_RELU_SINGLE #(.IO_WIDTH(IO_WIDTH)) u_bn (
             .clk       (clk),
-            .rst_n     (rst_n),
             .bn_en     (bn_en),
-            .mean      (mean),
-            .weight    (weight),
-            .bias      (bias),
-            .std       (std),
+            .biassubam (biassubam),
+            .wdivstd   (wdivstd),
             .acc_in    (acc_selected[p]),
             .bn_out    (bn_single_out[p]),
             .valid_out (valid_single[p])
         );
     end
 endgenerate
+
+
 
 endmodule
