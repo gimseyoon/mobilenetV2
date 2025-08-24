@@ -55,9 +55,9 @@ module tb_mobilenetV2#(
     .clk(clk),
     .rst_n(rst_n),
     .start(start),
-    .result_save_valid_o(result_save_valid),
-    .result_o(result),
-    //.all_done(all_done),
+    //.result_save_valid_o(result_save_valid),
+    //.result_o(result),
+    .all_done(all_done),
     .layer_8_result(layer_8_result)
   );
 
@@ -85,38 +85,38 @@ end
 integer fd;
 
 initial begin
-    fd = $fopen("result.txt", "w");
+    fd = $fopen("result_imple.txt", "w");
     if (fd == 0) begin
-        $display("ÆÄÀÏ ¿­±â ½ÇÆĞ");
+        $display("íŒŒì¼ ì—´ê¸° ì‹¤íŒ¨");
         $finish;
     end
 end
 
-// ---- ºí·Ï Ä«¿îÆ® ----
+// ---- ë¸”ë¡ ì¹´ìš´íŠ¸ ----
 integer block_cnt = 0;
 
-// result_d »ùÇÃ & valid µô·¹ÀÌ´Â ±âÁ¸ ±×´ë·Î »ç¿ëÇÑ´Ù°í °¡Á¤
-// result_save_valid_d °¡ 1ÀÏ ¶§¸¶´Ù 196°³ ´ıÇÁ
+// result_d ìƒ˜í”Œ & valid ë”œë ˆì´ëŠ” ê¸°ì¡´ ê·¸ëŒ€ë¡œ ì‚¬ìš©í•œë‹¤ê³  ê°€ì •
+// result_save_valid_d ê°€ 1ì¼ ë•Œë§ˆë‹¤ 196ê°œ ë¤í”„
 always @(posedge clk) begin
     if (result_save_valid_d) begin
         integer i;
         reg [19:0] hex20;
         for (i = 0; i < PIXEL; i = i + 1) begin
-            hex20 = { {2{result_d[i][17]}}, result_d[i] }; // 18b -> 20b ºÎÈ£È®Àå
+            hex20 = { {2{result_d[i][17]}}, result_d[i] }; // 18b -> 20b ë¶€í˜¸í™•ì¥
             $fwrite(fd, "%05h", hex20);
             if (i != PIXEL-1) $fwrite(fd, " ");
         end
         $fwrite(fd, "\n\n");
 
-        // ---- ºí·Ï ¼ö Áõ°¡ ----
+        // ---- ë¸”ë¡ ìˆ˜ ì¦ê°€ ----
         block_cnt <= block_cnt + 1;
 
-        // ---- 64¹øÂ° ¾´ "¹Ù·Î ±× »çÀÌÅ¬"¿¡ Á¾·á ----
+        // ---- 64ë²ˆì§¸ ì“´ "ë°”ë¡œ ê·¸ ì‚¬ì´í´"ì— ì¢…ë£Œ ----
         if (block_cnt == 63) begin
-            // block_cnt°¡ ÀÌ¹ø¿¡ 64°¡ µÇ¹Ç·Î(0ºÎÅÍ ½ÃÀÛ) ¹Ù·Î Á¾·á
-            $fflush(fd);   // ¹öÆÛ °­Á¦ ÇÃ·¯½Ã
+            // block_cntê°€ ì´ë²ˆì— 64ê°€ ë˜ë¯€ë¡œ(0ë¶€í„° ì‹œì‘) ë°”ë¡œ ì¢…ë£Œ
+            $fflush(fd);   // ë²„í¼ ê°•ì œ í”ŒëŸ¬ì‹œ
             $fclose(fd);
-            $display("[%0t] ¸ğµç 64 ºí·Ï ±â·Ï ¿Ï·á", $time);
+            $display("[%0t] ëª¨ë“  64 ë¸”ë¡ ê¸°ë¡ ì™„ë£Œ", $time);
             $finish;
         end
     end

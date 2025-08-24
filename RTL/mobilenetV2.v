@@ -13,13 +13,14 @@ module mobilenetV2 #(
     parameter ADDR_WMEM = $clog2(384 * 64),       // 15 (for 64*384 = 24576)
     parameter ADDR_W1_MEM = $clog2(384 * 9)       // 12 (for 9*384 = 3456)
 )(
-    //input clk_in,
-    input clk,
+    input clk_in,
+    //input clk,
     input rst_n,
     input start,
-    output result_save_valid_o,
-    output signed [3527:0] result_o,
-    output reg [13: 0] layer_8_result
+    //output result_save_valid_o,
+    //output signed [3527:0] result_o,
+    output reg [13: 0] layer_8_result,
+    output reg all_done
 );
 
 
@@ -42,7 +43,7 @@ module mobilenetV2 #(
 /////////////////////////////////////////////////////////////
 
 
-    //wire clk;
+    wire clk;
     wire locked;
     reg  new_start;
     wire rst_n_sync;
@@ -96,8 +97,8 @@ module mobilenetV2 #(
         result_q <= result;
     end
     
-    assign result_save_valid_o = result_save_valid;
-    assign result_o = result;
+    //assign result_save_valid_o = result_save_valid;
+    //assign result_o = result;
 //////////////////////////////////////////////////
 // bram_A
     wire                                        ena_0;
@@ -172,7 +173,7 @@ module mobilenetV2 #(
     reg signed [IO_WIDTH -1 : 0] result_2; always@(posedge clk or negedge rst_n_sync) if(!rst_n_sync) result_2 <= 0; else result_2 <= result[2*IO_WIDTH-1 : IO_WIDTH];
     reg signed [IO_WIDTH -1 : 0] result_3; always@(posedge clk or negedge rst_n_sync) if(!rst_n_sync) result_3 <= 0; else result_3 <= result[IO_WIDTH*PIXEL-1-IO_WIDTH -: IO_WIDTH];
     reg signed [IO_WIDTH -1 : 0] result_4; always@(posedge clk or negedge rst_n_sync) if(!rst_n_sync) result_4 <= 0; else result_4 <= result[IO_WIDTH*PIXEL-1 -: IO_WIDTH];
-    reg all_done;                          always@(posedge clk or negedge rst_n_sync) if(!rst_n_sync) all_done <= 0; else all_done <= skip_done;
+    /*reg all_done;     */                     always@(posedge clk or negedge rst_n_sync) if(!rst_n_sync) all_done <= 0; else all_done <= skip_done;
     
     
 ////////////////////////////////////////////////////////////
@@ -259,24 +260,23 @@ end
 //////////////////////////////////////////////////
 
 
-// ============================================================
-// FANOUT SPLIT for state  (no latency)
-//    - state_buf : keep
-//    - state_row[r] : row ?? ???? (Vivado?? ??? ????????? max_fanout ???)
-// ============================================================
+/////////////////////////////////////////////////////// 
+// mul_in, mul_weight
+///////////////////////////////////////////////////////
 (* keep = "true" *) wire [2:0] state_buf = state;
-(* max_fanout = 64 *) wire [2:0] state_row [0:ROW-1];
-
-genvar rr;
-generate
-  for (rr=0; rr<ROW; rr=rr+1) begin : STATE_FANOUT_SPLIT
-    assign state_row[rr] = state_buf; // ???? ????? ????(???? ????)
+(* DONT_TOUCH = "true" *) reg [2:0] state_row_q [0:ROW-1];
+integer r;
+always @(posedge clk or negedge rst_n_sync) begin
+  if (!rst_n_sync) begin
+    for (r=0; r<ROW; r=r+1) state_row_q[r] <= IDLE;
+  end else begin
+    for (r=0; r<ROW; r=r+1) state_row_q[r] <= state;  // row별로 복제
   end
-endgenerate
+end
 
-// ============================================================
-// decide multiplier input  (row???? select ?? ????/?????? ???)
-// ============================================================
+
+
+
 integer k;
 always @(posedge clk or negedge rst_n_sync) begin
   if(!rst_n_sync) begin
@@ -285,7 +285,7 @@ always @(posedge clk or negedge rst_n_sync) begin
   end else begin
     // ?????? ???(row?? case)
     for (k = 0; k < PIXEL; k = k + 1) begin : MULIN_UPDATE
-      case (state_row[k/14])
+      case (state_row_q[k/14])
         PW_1: mul_in[IO_WIDTH*(k+1)-1 -: IO_WIDTH] <= doutb_0[IO_WIDTH*(k+1)-1 -: IO_WIDTH];
         DW  : mul_in[IO_WIDTH*(k+1)-1 -: IO_WIDTH] <= doutb_1[IO_WIDTH*(k+1)-1 -: IO_WIDTH];
         PW_2: mul_in[IO_WIDTH*(k+1)-1 -: IO_WIDTH] <= doutb_1[IO_WIDTH*(k+1)-1 -: IO_WIDTH];
@@ -304,17 +304,37 @@ always @(posedge clk or negedge rst_n_sync) begin
 end
 
 
+/////////////////////////////////////////////////////// 
+// start edge 
+///////////////////////////////////////////////////////
 
-    // start rising-edge ????
-    reg start_d;
-    always @(posedge clk or negedge rst_n_sync) begin
-        if (!rst_n_sync) start_d <= 1'b0;
-        else     start_d <= start;
+reg start_d;
+always @(posedge clk or negedge rst_n_sync) begin
+    if (!rst_n_sync) start_d <= 1'b0;
+    else     start_d <= start;
+end
+wire start_rise = start & ~start_d;   // 1clk ???
+
+
+/////////////////////////////////////////////////////// 
+// state 1 clk delay
+///////////////////////////////////////////////////////
+reg [2:0] state_accumulator;
+reg [2:0] state_glbl_ctrl;
+reg [2:0] state_bn_relu;
+
+always @(posedge clk or negedge rst_n_sync) begin
+    if (!rst_n_sync) begin
+        state_accumulator <= 0;
+        state_glbl_ctrl <= 0;
+        state_bn_relu <= 0;
+    end 
+    else begin
+        state_accumulator <= state;
+        state_glbl_ctrl <= state;
+        state_bn_relu <= state;
     end
-    wire start_rise = start & ~start_d;   // 1clk ???
-
-
-
+end
 
 
 
@@ -348,7 +368,7 @@ glbl_ctrl glbl_ctrl_0 (
     .clk                (clk),
     .rst_n              (rst_n_sync),
     .layer_state        (layer_state),
-    .state              (state),
+    .state              (state_glbl_ctrl),
     .save_valid         (save_valid),
     .skip_valid         (skip_valid),
     .acc_out            (acc_out),
@@ -395,7 +415,7 @@ glbl_ctrl glbl_ctrl_0 (
 accumulator accumulator_0 (
     .clk                (clk),
     .rst_n              (rst_n_sync),
-    .state              (state),
+    .state              (state_accumulator),
     .mul_out            (mul_out),
     .bn_en              (bn_en),
     .pw_1_valid         (pw_1_valid),
@@ -422,7 +442,7 @@ multiplier multiplier_0 (
 BN_RELU BN_RELU_0 (
     .clk                (clk),
     .rst_n              (rst_n_sync),
-    .state              (state),
+    .state              (state_bn_relu),
     .pw_1_valid         (pw_1_valid),
     .dw_valid           (dw_valid),
     .pw_2_valid         (pw_2_valid),
@@ -468,7 +488,7 @@ bram_A bram_A (
   .doutb                (doutb_0)  // output wire [3527 : 0] doutb
 );
 // BRAM_B
-blk_mem_gen_1 bram_B (
+bram_B bram_B (
   .clka                 (clk),          // input wire clka
   .ena                  (ena_1_q),        // input wire ena
   .wea                  (wea_1_q),        // input wire [0 : 0] wea
@@ -482,7 +502,7 @@ blk_mem_gen_1 bram_B (
 
 //////////////////////////////////////////////////////////
 // BRAM_W0 (Pointwise_1 Weight)
-blk_mem_gen_2 bram_w0 (
+bram_W0 bram_W0 (
   .clka                 (clk),          // input wire clka
   .ena                  (ena_w0_q),       // input wire ena
   .addra                (addra_w0_q),     // input wire [14 : 0] addra
@@ -490,7 +510,7 @@ blk_mem_gen_2 bram_w0 (
 );
 
 // BRAM_W1 (Depthwise Weight)
-blk_mem_gen_3 bram_w1 (
+bram_W1 bram_W1 (
   .clka                 (clk),          // input wire clka
   .ena                  (ena_w1_q),       // input wire ena
   .addra                (addra_w1_q),     // input wire [11 : 0] addra
@@ -499,7 +519,7 @@ blk_mem_gen_3 bram_w1 (
 
 
 // BRAM_W2 (Pointwise_2 Weight)
-blk_mem_gen_4 bram_w2 (
+bram_W2 bram_W2 (
   .clka                 (clk),          // input wire clka
   .ena                  (ena_w2_q),       // input wire ena
   .addra                (addra_w2_q),     // input wire [14 : 0] addra
@@ -523,18 +543,18 @@ bram_w_div_std bram_w_div_std_0 (
 );
 /////////////////////////////////////////////////////////////
 
-/*
+
 clk_wiz_0 clk_100_0 (
     // Clock out ports
     .clk_100(clk),     // output clk_100
     // Status and control signals
-    .reset(rst_n_sync), // input reset
+    .reset(~rst_n), // input reset
     .locked(locked),       // output locked
    // Clock in ports
     .clk_in1(clk_in));      // input clk_in1
 
 
-
+/*
 
 ila_0 ila_0 (
 	.clk(clk), // input wire clk
