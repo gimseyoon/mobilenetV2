@@ -15,7 +15,7 @@ module mobilenetV2 #(
 )(
     input clk_in,
     //input clk,
-    input rst_n,
+    input rst,
     input start,
     //output result_save_valid_o,
     //output signed [3527:0] result_o,
@@ -42,11 +42,10 @@ module mobilenetV2 #(
                
 /////////////////////////////////////////////////////////////
 
-
     wire clk;
     wire locked;
     reg  new_start;
-    wire rst_n_sync;
+    //wire rst_n_sync;
     
 
     
@@ -173,7 +172,7 @@ module mobilenetV2 #(
     reg signed [IO_WIDTH -1 : 0] result_2; always@(posedge clk or negedge rst_n_sync) if(!rst_n_sync) result_2 <= 0; else result_2 <= result[2*IO_WIDTH-1 : IO_WIDTH];
     reg signed [IO_WIDTH -1 : 0] result_3; always@(posedge clk or negedge rst_n_sync) if(!rst_n_sync) result_3 <= 0; else result_3 <= result[IO_WIDTH*PIXEL-1-IO_WIDTH -: IO_WIDTH];
     reg signed [IO_WIDTH -1 : 0] result_4; always@(posedge clk or negedge rst_n_sync) if(!rst_n_sync) result_4 <= 0; else result_4 <= result[IO_WIDTH*PIXEL-1 -: IO_WIDTH];
-    /*reg all_done;     */                     always@(posedge clk or negedge rst_n_sync) if(!rst_n_sync) all_done <= 0; else all_done <= skip_done;
+    /*reg all_done;     */                  always@(posedge clk or negedge rst_n_sync) if(!rst_n_sync) all_done <= 0; else all_done <= skip_done;
     
     
 ////////////////////////////////////////////////////////////
@@ -339,11 +338,11 @@ end
 
 
 
-// Instantiate FSM
 reset_sync reset_sync_0(
     .clk(clk),
-    .rst_n_async(rst_n),    
-    .rst_n_sync(rst_n_sync)
+    .rst(rst),    
+    .rst_n_sync(rst_n_sync),
+    .rst_sync(rst_sync)
 );
 
 //////////////////////////////////////////////////
@@ -548,10 +547,11 @@ clk_wiz_0 clk_100_0 (
     // Clock out ports
     .clk_100(clk),     // output clk_100
     // Status and control signals
-    .reset(~rst_n), // input reset
+    .reset(rst_n_sync), // input reset
     .locked(locked),       // output locked
    // Clock in ports
-    .clk_in1(clk_in));      // input clk_in1
+    .clk_in1(clk_in)
+);      // input clk_in1
 
 
 /*
