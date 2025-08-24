@@ -10,11 +10,11 @@ module mobilenetV2 #(
     parameter ADDR_PARAM = 12,
     parameter ADDR_IN = $clog2(64),
     parameter ADDR_CHANNEL  = $clog2(384),        // 9 (for CHANNEL = 384)
-    parameter ADDR_WMEM = $clog2(384 * 64),       // 15 (for 64*384 = 24576)
-    parameter ADDR_W1_MEM = $clog2(384 * 9)       // 12 (for 9*384 = 3456)
+    parameter ADDR_WMEM = $clog2(24576*3),       // 15 (for 64*384 = 24576)
+    parameter ADDR_W1_MEM = $clog2(3456*3)       // 12 (for 9*384 = 3456)
 )(
-    input clk_in,
-    //input clk,
+    //input clk_in,
+    input clk,
     input rst,
     input start,
     //output result_save_valid_o,
@@ -42,7 +42,7 @@ module mobilenetV2 #(
                
 /////////////////////////////////////////////////////////////
 
-    wire clk;
+    //wire clk;
     wire locked;
     reg  new_start;
     //wire rst_n_sync;
@@ -69,7 +69,7 @@ module mobilenetV2 #(
     wire dw_done;
     wire pw_2_valid;
     wire pw_2_done;
-
+    wire bn_en;
 //////////////////////////////////////////////////
 // BN_RELU
     wire signed [IO_WIDTH * PIXEL - 1 : 0] bn_relu_out;
@@ -209,11 +209,11 @@ end
             layer_8_result[j] <= result[(j * 18 * 14) + 17];
         end  
     end
-/*
+
 //////////////////////////////////////////////////
 // new_start ( layer (9, 10) )
-    always@(posedge clk or negedge rst_n) begin
-        if(!rst_n) begin
+    always@(posedge clk or negedge rst_n_sync) begin
+        if(!rst_n_sync) begin
             new_start <= 0;
         end
         else begin
@@ -223,9 +223,9 @@ end
             else begin
                 new_start <= 0;
             end
-        end // rst_n
+        end // rst_n_sync
     end //always
-*/
+
 //////////////////////////////////////////////////
 // sk_in_1, sk_in_2    
     assign sk_in_1 = (skip_valid) ? doutb_0 : 0;
@@ -542,32 +542,28 @@ bram_w_div_std bram_w_div_std_0 (
 );
 /////////////////////////////////////////////////////////////
 
-
+/*
 clk_wiz_0 clk_100_0 (
     // Clock out ports
     .clk_100(clk),     // output clk_100
     // Status and control signals
-    .reset(rst_n_sync), // input reset
+    .reset(rst), // input reset
     .locked(locked),       // output locked
    // Clock in ports
     .clk_in1(clk_in)
 );      // input clk_in1
 
 
-/*
-
 ila_0 ila_0 (
 	.clk(clk), // input wire clk
 	.probe0(result_save_valid), // input wire [0:0]  probe0  
 	.probe1(all_done), // input wire [0:0]  probe1 
 	.probe2(result_1), // input wire [17:0]  probe2 
-	.probe3(result_2), // input wire [17:0]  probe3 
-	.probe4(result_3), // input wire [17:0]  probe4 
-	.probe5(result_4) // input wire [17:0]  probe5
+	.probe3(result_4), // input wire [17:0]  probe3 
+	.probe4(layer_state), // input wire [1:0]  probe4 
+	.probe5(state) // input wire [2:0]  probe5
 );
-
 */
-
 
 
 
