@@ -16,7 +16,7 @@ module BN_RELU_SINGLE #(
     output signed [IO_WIDTH-1:0] bn_out,
     output                      valid_out
 );
-
+ 
 /////////////////////////////////////////////////////// 
 // Wires between FP IP blocks
 ///////////////////////////////////////////////////////
