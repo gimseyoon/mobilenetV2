@@ -17,8 +17,8 @@ module mobilenetV2 #(
     input clk,
     input rst,
     input start,
-    //output result_save_valid_o,
-    //output signed [3527:0] result_o,
+    output result_save_valid_o,
+    output signed [3527:0] result_o,
     output reg [13: 0] layer_8_result,
     output reg all_done
 );
@@ -96,8 +96,8 @@ module mobilenetV2 #(
         result_q <= result;
     end
     
-    //assign result_save_valid_o = result_save_valid;
-    //assign result_o = result;
+    assign result_save_valid_o = result_save_valid;
+    assign result_o = result;
 //////////////////////////////////////////////////
 // bram_A
     wire                                        ena_0;

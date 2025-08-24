@@ -12,7 +12,7 @@ module tb_mobilenetV2#(
 );
 
   reg clk = 1'b0;
-  reg rst_n = 1'b1;
+  reg rst = 1'b0;
   reg start = 1'b0;
 
   wire signed [3527:0] result;
@@ -27,14 +27,14 @@ module tb_mobilenetV2#(
   //wire [1:0] layer_8_result;
   
     // Clock generation
-    always #5 clk = ~clk; // 100MHz (10ns period)
+    always #2.5 clk = ~clk; // 200MHz (5ns period)
 
     // Stimulus
     initial begin
         #200;
-        rst_n = 0;
-        #20;
-        rst_n = 1;
+        rst = 1;
+        #10;
+        rst = 0;
         #20;
 
         #1000;
@@ -53,17 +53,17 @@ module tb_mobilenetV2#(
   // -------------------------
   mobilenetV2 DUT (
     .clk(clk),
-    .rst_n(rst_n),
+    .rst(rst),
     .start(start),
-    //.result_save_valid_o(result_save_valid),
-    //.result_o(result),
+    .result_save_valid_o(result_save_valid),
+    .result_o(result),
     .all_done(all_done),
     .layer_8_result(layer_8_result)
   );
 
 integer p;
-always@(posedge clk or negedge rst_n) begin
-    if(!rst_n) begin
+always@(posedge clk or negedge rst) begin
+    if(rst) begin
         for (p = 0; p < PIXEL; p = p + 1) begin
             result_d[p] <= 0;
         end
@@ -85,38 +85,48 @@ end
 integer fd;
 
 initial begin
-    fd = $fopen("result_imple.txt", "w");
+    fd = $fopen("result_all_layer_onlydata.txt", "w");
     if (fd == 0) begin
-        $display("íŒŒì¼ ì—´ê¸° ì‹¤íŒ¨");
+        $display("ÆÄÀÏ ¿­±â ½ÇÆĞ");
         $finish;
     end
 end
 
-// ---- ë¸”ë¡ ì¹´ìš´íŠ¸ ----
+// ---- ºí·Ï Ä«¿îÆ® ----
 integer block_cnt = 0;
 
-// result_d ìƒ˜í”Œ & valid ë”œë ˆì´ëŠ” ê¸°ì¡´ ê·¸ëŒ€ë¡œ ì‚¬ìš©í•œë‹¤ê³  ê°€ì •
-// result_save_valid_d ê°€ 1ì¼ ë•Œë§ˆë‹¤ 196ê°œ ë¤í”„
+
 always @(posedge clk) begin
     if (result_save_valid_d) begin
         integer i;
+        integer this_blk;        // ÀÌ¹ø ºí·Ï ÀÎµ¦½º(0~191)
+        integer layer_idx;       // 8/9/10 (Âü°í¿ë)
+        integer chan_idx;        // 0~63   (Âü°í¿ë)
         reg [19:0] hex20;
+
+        this_blk  = block_cnt;
+        layer_idx = 8 + (this_blk / 64);   // 8,9,10
+        chan_idx  = this_blk % 64;         // 0..63
+
+        // ===== Çì´õ =====
+        // ¿ä±¸»çÇ×: [CHANNEL N]
+        // (¿øÇÏ¸é ¾Æ·¡Ã³·³ ·¹ÀÌ¾î/Ã¤³Î·Îµµ Ãâ·Â °¡´É)
+        // $fwrite(fd, "[LAYER %0d] [CHANNEL %0d]\n", layer_idx, chan_idx);
+
+        // ===== °ª 196°³(18b ¡æ ºÎÈ£È®Àå 20b, °ø¹é ±¸ºĞ) =====
         for (i = 0; i < PIXEL; i = i + 1) begin
-            hex20 = { {2{result_d[i][17]}}, result_d[i] }; // 18b -> 20b ë¶€í˜¸í™•ì¥
+            hex20 = { {2{result_d[i][17]}}, result_d[i] };
             $fwrite(fd, "%05h", hex20);
             if (i != PIXEL-1) $fwrite(fd, " ");
         end
-        $fwrite(fd, "\n\n");
+        $fwrite(fd, "\n");   // ÁÙ¹Ù²Ş (Çì´õ µÚ 1ÁÙ + °ª µÚ 1ÁÙ = ÃÑ 2ÁÙ)
 
-        // ---- ë¸”ë¡ ìˆ˜ ì¦ê°€ ----
-        block_cnt <= block_cnt + 1;
-
-        // ---- 64ë²ˆì§¸ ì“´ "ë°”ë¡œ ê·¸ ì‚¬ì´í´"ì— ì¢…ë£Œ ----
-        if (block_cnt == 63) begin
-            // block_cntê°€ ì´ë²ˆì— 64ê°€ ë˜ë¯€ë¡œ(0ë¶€í„° ì‹œì‘) ë°”ë¡œ ì¢…ë£Œ
-            $fflush(fd);   // ë²„í¼ ê°•ì œ í”ŒëŸ¬ì‹œ
+        // ===== Ä«¿îÅÍ °»½Å ¹× Á¾·á Ã³¸® =====
+        block_cnt = block_cnt + 1;
+        if (this_blk == 191) begin           // 0~191 = 192¹øÂ°¸¦ ¸· ¾´ »çÀÌÅ¬
+            $fflush(fd);
             $fclose(fd);
-            $display("[%0t] ëª¨ë“  64 ë¸”ë¡ ê¸°ë¡ ì™„ë£Œ", $time);
+            $display("[%0t] 192 blocks (LAYER8~10) saved.", $time);
             $finish;
         end
     end
