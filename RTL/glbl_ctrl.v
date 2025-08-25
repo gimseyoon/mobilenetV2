@@ -1,17 +1,16 @@
 `timescale 1ns / 1ps
 
 module glbl_ctrl #(
-    parameter IO_WIDTH = 18,
-    parameter ROW = 14,
-    parameter COLUMN = 14,
-    parameter PIXEL = ROW * COLUMN,              // 14 * 14 = 196
-    parameter W_WIDTH = 17,
-    parameter INPUT_CHANNEL = 64,
-    parameter ADDR_PARAM = 12,
-    parameter ADDR_IN = $clog2(64),
-    parameter ADDR_CHANNEL  = $clog2(384),        // 9 (for CHANNEL = 384)
-    parameter ADDR_WMEM = $clog2(24576*3),       // 15 (for 64*384 = 24576)
-    parameter ADDR_W1_MEM = $clog2(3456*3)       // 12 (for 9*384 = 3456)
+    parameter IO_WIDTH       = 18,
+    parameter ROW            = 14,
+    parameter COLUMN         = 14,
+    parameter PIXEL          = ROW * COLUMN,              // 14 * 14 = 196
+    parameter W_WIDTH        = 17,
+    parameter INPUT_CHANNEL  = 64,
+    parameter ADDR_PARAM     = 12,
+    parameter ADDR_CHANNEL   = $clog2(384),               // 9 (for CHANNEL = 384)
+    parameter ADDR_WMEM      = $clog2(384 * 64),          // 15 (for 64*384 = 24576)
+    parameter ADDR_W1_MEM    = $clog2(384 * 9)            // 12 (for 9*384 = 3456)
 )(
     input                                   clk,
     input                                   rst_n,

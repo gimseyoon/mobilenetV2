@@ -34,44 +34,52 @@ localparam READY    = 2'b00,
 ///////////////////////////////////////////////////////
 reg [2:0] next_state;
 reg [1:0] next_layer_state;
-
-
-
-//=================== State register ===================
+/////////////////////////////////////////////////////// 
+// State register
+///////////////////////////////////////////////////////
 always @(posedge clk or negedge rst_n) begin
-  if (!rst_n) begin
-    state       <= IDLE;
-    layer_state <= READY;
-  end else begin
-    state       <= next_state;
-    layer_state <= next_layer_state;
-  end
+    if (!rst_n) begin
+        state <= IDLE;
+        layer_state <= READY;
+    end
+    else begin
+        state <= next_state;
+        layer_state <= next_layer_state;
+    end
 end
 
-//=================== Next-state logic =================
-always @* begin
-  next_state = state;  // 기본값: 유지
-  case (state)
-    IDLE    : if (start || new_start) next_state = PW_1;
-    PW_1    : if (pw_1_bn_relu_done)  next_state = PW_1_RST;
-    PW_1_RST:                          next_state = DW;
-    DW      : if (dw_bn_relu_done)    next_state = DW_RST;
-    DW_RST  :                          next_state = PW_2;
-    PW_2    : if (skip_done)          next_state = IDLE;
-    default :                          next_state = IDLE;
-  endcase
+/////////////////////////////////////////////////////// 
+// Next-state combinational logic
+///////////////////////////////////////////////////////
+always @(*) begin
+    next_state = state;
+    case (state)
+        IDLE:     if (start || new_start)   next_state = PW_1; 
+        PW_1:     if (pw_1_bn_relu_done)    next_state = PW_1_RST;
+        PW_1_RST:                           next_state = DW;
+        DW:       if (dw_bn_relu_done)      next_state = DW_RST; 
+        DW_RST:                             next_state = PW_2;
+        PW_2:     if (skip_done)            next_state = IDLE; 
+        /*
+        PW_2_RST:                           next_state = EXPORT;
+        EXPORT:   if (export_done)          next_state = IDLE;
+        */
+        default: next_state = IDLE;
+    endcase
 end
 
-always @* begin
-  next_layer_state = layer_state;  // 기본값: 유지
-  case (layer_state)
-    READY  : if (start || new_start) next_layer_state = LAYER_8;
-    LAYER_8: if (new_start)          next_layer_state = LAYER_9;
-    LAYER_9: if (new_start)          next_layer_state = LAYER_10;
-    LAYER_10: if (new_start)         next_layer_state = READY;
-    default:                         next_layer_state = READY;
-  endcase
+always @(*) begin
+    next_layer_state = layer_state;
+    case (layer_state)
+        READY:       if (start || new_start)    next_layer_state = LAYER_8; else next_layer_state = next_layer_state; 
+        LAYER_8:     if (new_start)             next_layer_state = LAYER_9; else next_layer_state = next_layer_state; 
+        LAYER_9:     if (new_start)             next_layer_state = LAYER_10; else next_layer_state = next_layer_state; 
+        LAYER_10:    if (new_start)             next_layer_state = READY; else next_layer_state = next_layer_state; 
+
+        default: next_layer_state = READY;
+    endcase
 end
+
 
 
 endmodule

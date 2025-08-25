@@ -23,15 +23,15 @@ module tb_mobilenetV2#(
   
   
   
-  //wire all_done;
-  //wire [1:0] layer_8_result;
+  wire all_done;
+  wire [13:0] layer_8_result;
   
     // Clock generation
-    always #2.5 clk = ~clk; // 200MHz (5ns period)
+    always #5 clk = ~clk; // 100MHz (5ns period)
 
     // Stimulus
     initial begin
-        #200;
+        #500;
         rst = 1;
         #10;
         rst = 0;
@@ -62,7 +62,7 @@ module tb_mobilenetV2#(
   );
 
 integer p;
-always@(posedge clk or negedge rst) begin
+always@(posedge clk or posedge rst) begin
     if(rst) begin
         for (p = 0; p < PIXEL; p = p + 1) begin
             result_d[p] <= 0;

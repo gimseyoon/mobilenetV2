@@ -4,6 +4,7 @@ module NEW_BN_RELU_SINGLE #(
     parameter IO_WIDTH = 18
 )(
     input                       clk,
+    input                       rst_n,
     input                       bn_en,
 
     input       [31:0]          biassubam,

@@ -7,11 +7,11 @@ module mobilenetV2 #(
     parameter PIXEL = ROW * COLUMN,              // 14 * 14 = 196
     parameter W_WIDTH = 17,
     parameter INPUT_CHANNEL = 64,
-    parameter ADDR_PARAM = 12,
+    parameter ADDR_PARAM = 10,
     parameter ADDR_IN = $clog2(64),
     parameter ADDR_CHANNEL  = $clog2(384),        // 9 (for CHANNEL = 384)
-    parameter ADDR_WMEM = $clog2(24576*3),       // 15 (for 64*384 = 24576)
-    parameter ADDR_W1_MEM = $clog2(3456*3)       // 12 (for 9*384 = 3456)
+    parameter ADDR_WMEM = $clog2(384 * 64),       // 15 (for 64*384 = 24576)
+    parameter ADDR_W1_MEM = $clog2(384 * 9)       // 12 (for 9*384 = 3456)
 )(
     //input clk_in,
     input clk,
@@ -42,10 +42,11 @@ module mobilenetV2 #(
                
 /////////////////////////////////////////////////////////////
 
+
     //wire clk;
     wire locked;
     reg  new_start;
-    //wire rst_n_sync;
+    wire rst_n_sync;
     
 
     
@@ -69,7 +70,7 @@ module mobilenetV2 #(
     wire dw_done;
     wire pw_2_valid;
     wire pw_2_done;
-    wire bn_en;
+
 //////////////////////////////////////////////////
 // BN_RELU
     wire signed [IO_WIDTH * PIXEL - 1 : 0] bn_relu_out;
@@ -172,7 +173,7 @@ module mobilenetV2 #(
     reg signed [IO_WIDTH -1 : 0] result_2; always@(posedge clk or negedge rst_n_sync) if(!rst_n_sync) result_2 <= 0; else result_2 <= result[2*IO_WIDTH-1 : IO_WIDTH];
     reg signed [IO_WIDTH -1 : 0] result_3; always@(posedge clk or negedge rst_n_sync) if(!rst_n_sync) result_3 <= 0; else result_3 <= result[IO_WIDTH*PIXEL-1-IO_WIDTH -: IO_WIDTH];
     reg signed [IO_WIDTH -1 : 0] result_4; always@(posedge clk or negedge rst_n_sync) if(!rst_n_sync) result_4 <= 0; else result_4 <= result[IO_WIDTH*PIXEL-1 -: IO_WIDTH];
-    /*reg all_done;     */                  always@(posedge clk or negedge rst_n_sync) if(!rst_n_sync) all_done <= 0; else all_done <= skip_done;
+    /*reg all_done;*/                          always@(posedge clk or negedge rst_n_sync) if(!rst_n_sync) all_done <= 0; else all_done <= skip_done;
     
     
 ////////////////////////////////////////////////////////////
@@ -209,11 +210,11 @@ end
             layer_8_result[j] <= result[(j * 18 * 14) + 17];
         end  
     end
-
+/*
 //////////////////////////////////////////////////
 // new_start ( layer (9, 10) )
-    always@(posedge clk or negedge rst_n_sync) begin
-        if(!rst_n_sync) begin
+    always@(posedge clk or negedge rst_n) begin
+        if(!rst_n) begin
             new_start <= 0;
         end
         else begin
@@ -223,32 +224,15 @@ end
             else begin
                 new_start <= 0;
             end
-        end // rst_n_sync
+        end // rst_n
     end //always
-
+*/
 //////////////////////////////////////////////////
 // sk_in_1, sk_in_2    
     assign sk_in_1 = (skip_valid) ? doutb_0 : 0;
     assign sk_in_2 = (skip_valid) ? bn_relu_out : 0;
     
-//////////////////////////////////////////////////
-// decide multiplier input
-/*
-always @(posedge clk or negedge rst_n) begin
-    if(!rst_n) begin
-        mul_in <= 0;
-    end
-    else begin
-        case (state)
-          PW_1: begin mul_in <= doutb_0; mul_weight <= douta_w0; end
-          DW  : begin mul_in <= doutb_1; mul_weight <= douta_w1; end
-          PW_2: begin mul_in <= doutb_1; mul_weight <= douta_w2; end
-          default: begin mul_in <= 0; mul_weight <= 0; end
-        endcase 
-    end
 
-end 
-*/
 /////////////////////////////////////////////////////// 
 // Data muxing for BRAM write data
 ///////////////////////////////////////////////////////
@@ -259,23 +243,24 @@ end
 //////////////////////////////////////////////////
 
 
-/////////////////////////////////////////////////////// 
-// mul_in, mul_weight
-///////////////////////////////////////////////////////
+// ============================================================
+// FANOUT SPLIT for state  (no latency)
+//    - state_buf : keep
+//    - state_row[r] : row ?? ???? (Vivado?? ??? ????????? max_fanout ???)
+// ============================================================
 (* keep = "true" *) wire [2:0] state_buf = state;
-(* DONT_TOUCH = "true" *) reg [2:0] state_row_q [0:ROW-1];
-integer r;
-always @(posedge clk or negedge rst_n_sync) begin
-  if (!rst_n_sync) begin
-    for (r=0; r<ROW; r=r+1) state_row_q[r] <= IDLE;
-  end else begin
-    for (r=0; r<ROW; r=r+1) state_row_q[r] <= state;  // row별로 복제
+(* max_fanout = 64 *) wire [2:0] state_row [0:ROW-1];
+
+genvar rr;
+generate
+  for (rr=0; rr<ROW; rr=rr+1) begin : STATE_FANOUT_SPLIT
+    assign state_row[rr] = state_buf; // ???? ????? ????(???? ????)
   end
-end
+endgenerate
 
-
-
-
+// ============================================================
+// decide multiplier input  (row???? select ?? ????/?????? ???)
+// ============================================================
 integer k;
 always @(posedge clk or negedge rst_n_sync) begin
   if(!rst_n_sync) begin
@@ -284,7 +269,7 @@ always @(posedge clk or negedge rst_n_sync) begin
   end else begin
     // ?????? ???(row?? case)
     for (k = 0; k < PIXEL; k = k + 1) begin : MULIN_UPDATE
-      case (state_row_q[k/14])
+      case (state_row[k/14])
         PW_1: mul_in[IO_WIDTH*(k+1)-1 -: IO_WIDTH] <= doutb_0[IO_WIDTH*(k+1)-1 -: IO_WIDTH];
         DW  : mul_in[IO_WIDTH*(k+1)-1 -: IO_WIDTH] <= doutb_1[IO_WIDTH*(k+1)-1 -: IO_WIDTH];
         PW_2: mul_in[IO_WIDTH*(k+1)-1 -: IO_WIDTH] <= doutb_1[IO_WIDTH*(k+1)-1 -: IO_WIDTH];
@@ -303,46 +288,23 @@ always @(posedge clk or negedge rst_n_sync) begin
 end
 
 
-/////////////////////////////////////////////////////// 
-// start edge 
-///////////////////////////////////////////////////////
-
-reg start_d;
-always @(posedge clk or negedge rst_n_sync) begin
-    if (!rst_n_sync) start_d <= 1'b0;
-    else     start_d <= start;
-end
-wire start_rise = start & ~start_d;   // 1clk ???
-
-
-/////////////////////////////////////////////////////// 
-// state 1 clk delay
-///////////////////////////////////////////////////////
-reg [2:0] state_accumulator;
-reg [2:0] state_glbl_ctrl;
-reg [2:0] state_bn_relu;
-
-always @(posedge clk or negedge rst_n_sync) begin
-    if (!rst_n_sync) begin
-        state_accumulator <= 0;
-        state_glbl_ctrl <= 0;
-        state_bn_relu <= 0;
-    end 
-    else begin
-        state_accumulator <= state;
-        state_glbl_ctrl <= state;
-        state_bn_relu <= state;
+    // start rising-edge ????
+    reg start_d;
+    always @(posedge clk or negedge rst_n_sync) begin
+        if (!rst_n_sync) start_d <= 1'b0;
+        else     start_d <= start;
     end
-end
+    wire start_rise = start & ~start_d;   // 1clk ???
 
 
 
 
+// Instantiate FSM
 reset_sync reset_sync_0(
     .clk(clk),
-    .rst(rst),    
-    .rst_n_sync(rst_n_sync),
-    .rst_sync(rst_sync)
+    .rst(rst),
+    .rst_sync(rst_sync),    
+    .rst_n_sync(rst_n_sync)
 );
 
 //////////////////////////////////////////////////
@@ -367,7 +329,7 @@ glbl_ctrl glbl_ctrl_0 (
     .clk                (clk),
     .rst_n              (rst_n_sync),
     .layer_state        (layer_state),
-    .state              (state_glbl_ctrl),
+    .state              (state),
     .save_valid         (save_valid),
     .skip_valid         (skip_valid),
     .acc_out            (acc_out),
@@ -414,7 +376,7 @@ glbl_ctrl glbl_ctrl_0 (
 accumulator accumulator_0 (
     .clk                (clk),
     .rst_n              (rst_n_sync),
-    .state              (state_accumulator),
+    .state              (state),
     .mul_out            (mul_out),
     .bn_en              (bn_en),
     .pw_1_valid         (pw_1_valid),
@@ -441,7 +403,7 @@ multiplier multiplier_0 (
 BN_RELU BN_RELU_0 (
     .clk                (clk),
     .rst_n              (rst_n_sync),
-    .state              (state_bn_relu),
+    .state              (state),
     .pw_1_valid         (pw_1_valid),
     .dw_valid           (dw_valid),
     .pw_2_valid         (pw_2_valid),
@@ -501,7 +463,7 @@ bram_B bram_B (
 
 //////////////////////////////////////////////////////////
 // BRAM_W0 (Pointwise_1 Weight)
-bram_W0 bram_W0 (
+bram_W0 bram_w0 (
   .clka                 (clk),          // input wire clka
   .ena                  (ena_w0_q),       // input wire ena
   .addra                (addra_w0_q),     // input wire [14 : 0] addra
@@ -509,7 +471,7 @@ bram_W0 bram_W0 (
 );
 
 // BRAM_W1 (Depthwise Weight)
-bram_W1 bram_W1 (
+bram_W1 bram_w1 (
   .clka                 (clk),          // input wire clka
   .ena                  (ena_w1_q),       // input wire ena
   .addra                (addra_w1_q),     // input wire [11 : 0] addra
@@ -518,7 +480,7 @@ bram_W1 bram_W1 (
 
 
 // BRAM_W2 (Pointwise_2 Weight)
-bram_W2 bram_W2 (
+bram_W2 bram_w2 (
   .clka                 (clk),          // input wire clka
   .ena                  (ena_w2_q),       // input wire ena
   .addra                (addra_w2_q),     // input wire [14 : 0] addra
@@ -550,18 +512,38 @@ clk_wiz_0 clk_100_0 (
     .reset(rst), // input reset
     .locked(locked),       // output locked
    // Clock in ports
-    .clk_in1(clk_in)
-);      // input clk_in1
+    .clk_in1(clk_in));      // input clk_in1
+*/
 
 
-ila_0 ila_0 (
+/*
+ila_1 ila_1_test (
 	.clk(clk), // input wire clk
+
+
 	.probe0(result_save_valid), // input wire [0:0]  probe0  
-	.probe1(all_done), // input wire [0:0]  probe1 
+	.probe1(start), // input wire [0:0]  probe1 
 	.probe2(result_1), // input wire [17:0]  probe2 
 	.probe3(result_4), // input wire [17:0]  probe3 
-	.probe4(layer_state), // input wire [1:0]  probe4 
-	.probe5(state) // input wire [2:0]  probe5
+	.probe4(state), // input wire [2:0]  probe4 
+	.probe5(all_done), // input wire [0:0]  probe5 
+	.probe6(start_d), // input wire [0:0]  probe6 
+	.probe7(start_rise), // input wire [0:0]  probe7 
+	.probe8(pw_1_bn_relu_done), // input wire [0:0]  probe8 
+	.probe9(dw_bn_relu_done), // input wire [0:0]  probe9 
+	.probe10(skip_done), // input wire [0:0]  probe10 
+	.probe11(skip_valid), // input wire [0:0]  probe11 
+	.probe12(save_valid), // input wire [0:0]  probe12 
+	.probe13(pw_1_valid), // input wire [0:0]  probe13 
+	.probe14(pw_1_done), // input wire [0:0]  probe14 
+	.probe15(dw_valid), // input wire [0:0]  probe15 
+	.probe16(dw_done), // input wire [0:0]  probe16 
+	.probe17(pw_2_valid), // input wire [0:0]  probe17 
+	.probe18(pw_2_done), // input wire [0:0]  probe18 
+	.probe19(clk), // input wire [0:0]  probe19
+	.probe20(rst), // input wire [0:0]  probe20 
+	.probe21(rst_sync), // input wire [0:0]  probe21 
+	.probe22(rst_n_sync) // input wire [0:0]  probe22
 );
 */
 

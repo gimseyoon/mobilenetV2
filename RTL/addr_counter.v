@@ -7,11 +7,11 @@ module addr_counter #(
     parameter PIXEL = ROW * COLUMN,              // 14 * 14 = 196
     parameter W_WIDTH = 17,
     parameter INPUT_CHANNEL = 64,
-    parameter ADDR_PARAM = 12,
+    parameter ADDR_PARAM = 10,
     parameter ADDR_IN = $clog2(64),
     parameter ADDR_CHANNEL  = $clog2(384),        // 9 (for CHANNEL = 384)
-    parameter ADDR_WMEM = $clog2(24576*3),       // 17 (for 24576*3)
-    parameter ADDR_W1_MEM = $clog2(3456*3)       // 14 (for 3456*3)
+    parameter ADDR_WMEM = $clog2(384 * 64),       // 15 (for 64*384 = 24576)
+    parameter ADDR_W1_MEM = $clog2(384 * 9)       // 12 (for 9*384 = 3456)
 )(
     input                           clk,
     input                           rst_n,
@@ -61,18 +61,6 @@ localparam READY    = 2'b00,
            LAYER_9  = 2'b10,
            LAYER_10 = 2'b11;
            
-//weight OFFSET
-localparam [ADDR_WMEM-1:0]   LAYER_8_W0_OFFSET    = 17'd0;
-localparam [ADDR_W1_MEM-1:0] LAYER_8_W1_OFFSET    = 14'd0;
-localparam [ADDR_WMEM-1:0]   LAYER_8_W2_OFFSET    = 17'd0;
-localparam [ADDR_WMEM-1:0]   LAYER_9_W0_OFFSET    = 17'd24576;
-localparam [ADDR_W1_MEM-1:0] LAYER_9_W1_OFFSET    = 14'd3456;
-localparam [ADDR_WMEM-1:0]   LAYER_9_W2_OFFSET    = 17'd24576;
-localparam [ADDR_WMEM-1:0]   LAYER_10_W0_OFFSET   = 17'd49152;
-localparam [ADDR_W1_MEM-1:0] LAYER_10_W1_OFFSET   = 14'd6912;
-localparam [ADDR_WMEM-1:0]   LAYER_10_W2_OFFSET   = 17'd49152;
-           
-//parameter OFFSET           
 localparam [ADDR_PARAM-1:0] LAYER_8_PW_1_OFFSET  = 12'd0;
 localparam [ADDR_PARAM-1:0] LAYER_8_DW_OFFSET    = 12'd384;
 localparam [ADDR_PARAM-1:0] LAYER_8_PW_2_OFFSET  = 12'd768;
@@ -114,10 +102,8 @@ end
 always @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
         enb_0_q        <= 1'b0;
-        dw_cnt         <= 5'd0;
-        pw_1_read_done <= 0;
-        dw_read_done   <= 0;
-        pw_2_read_done <= 0;
+        dw_cnt            <= 5'd0;
+
         addra_0        <= 0;
         addrb_0        <= 0;
         addra_1        <= 0;
@@ -148,25 +134,18 @@ always @(posedge clk or negedge rst_n) begin
                 addrb_0         <= 0;
                 addra_1         <= 0;
                 addrb_1         <= 0;
-
+                addra_w0        <= 0;
+                addra_w1        <= 0;
+                addra_w2        <= 0;
                 if(layer_state == LAYER_8) begin
-                    addra_w0          <= 0;
-                    addra_w1          <= 0;
-                    addra_w2          <= 0;
                     addra_biassubam_0 <= 0;
                     addra_wdivstd_0   <= 0;
                 end
                 else if(layer_state == LAYER_9) begin
-                    addra_w0          <= LAYER_9_W0_OFFSET;
-                    addra_w1          <= LAYER_9_W1_OFFSET;
-                    addra_w2          <= LAYER_9_W2_OFFSET;
                     addra_biassubam_0 <= LAYER_9_PW_1_OFFSET;
                     addra_wdivstd_0   <= LAYER_9_PW_1_OFFSET;      
                 end
                 else if(layer_state == LAYER_10) begin
-                    addra_w0          <= LAYER_10_W0_OFFSET;
-                    addra_w1          <= LAYER_10_W1_OFFSET;
-                    addra_w2          <= LAYER_10_W2_OFFSET;
                     addra_biassubam_0 <= LAYER_10_PW_1_OFFSET;
                     addra_wdivstd_0   <= LAYER_10_PW_1_OFFSET;      
                 end
@@ -179,13 +158,19 @@ always @(posedge clk or negedge rst_n) begin
                 // BRAM_A, BRAM_W_0
                 if (enb_0) begin
                     addrb_0  <= (addrb_0 >= 6'd63) ? 0 : addrb_0 + 1'b1;
-                    addra_w0 <= addra_w0 + 1'b1;
+                    if(addra_w0 == 24575) begin
+                        addra_w0 <= 0;
+                    end
+                    else begin
+                        addra_w0 <= addra_w0 + 1'b1;
+                    end
                 end
                 else begin
                     addrb_0  <= 0;
+                    addra_w0 <= {ADDR_WMEM{1'b0}};
                 end
 
-                if((addra_w0 == LAYER_9_W0_OFFSET || addra_w0 == LAYER_10_W0_OFFSET) && (layer_state == LAYER_8)) begin
+                if(addra_w0 == 15'd24576) begin
                     pw_1_read_done <= 1;
                 end
                 
@@ -201,19 +186,8 @@ always @(posedge clk or negedge rst_n) begin
             ///////////////////////////////////////////////////////
             PW_1_RST: begin
                 addra_1             <= 0;      
-                
-                if(layer_state == LAYER_8) begin
-                    addra_biassubam_0 <= LAYER_8_DW_OFFSET;
-                    addra_wdivstd_0   <= LAYER_8_DW_OFFSET;
-                end
-                else if(layer_state == LAYER_9) begin
-                    addra_biassubam_0 <= LAYER_9_DW_OFFSET;
-                    addra_wdivstd_0   <= LAYER_9_DW_OFFSET;      
-                end
-                else if(layer_state == LAYER_10) begin
-                    addra_biassubam_0 <= LAYER_10_DW_OFFSET;
-                    addra_wdivstd_0   <= LAYER_10_DW_OFFSET;      
-                end
+                addra_biassubam_0 <= LAYER_8_DW_OFFSET;
+                addra_wdivstd_0   <= LAYER_8_DW_OFFSET;
                 
                 mean_run<=1'b0; std_run<=1'b0; weight_run<=1'b0; bias_run<=1'b0;
                 mean_phase<=6'd0; std_phase<=6'd0; weight_phase<=6'd0; bias_phase<=6'd0;
@@ -227,7 +201,12 @@ always @(posedge clk or negedge rst_n) begin
                 // BRAM_B, BRAM_W1
                 if (enb_1) begin
                         if ((dw_cnt <= 5'd7) || (dw_cnt == 5'd28)) begin
-                            addra_w1 <= addra_w1 + 1'b1;
+                            if(addra_w1 == 3455) begin
+                                addra_w1 <= 0;
+                            end
+                            else begin
+                                addra_w1 <= addra_w1 + 1'b1;
+                            end
                         end
                         
                         if (dw_cnt == 5'd28) begin
@@ -238,10 +217,11 @@ always @(posedge clk or negedge rst_n) begin
                         end
                 end
                 else begin
+                    addra_w1 <= 0;
                     addrb_1 <= 0;
                 end
                 
-                if((addra_w1 == LAYER_9_W1_OFFSET || addra_w1 == LAYER_10_W1_OFFSET) && (layer_state == LAYER_8)) begin
+                if(addra_w1 == 12'd3455) begin
                     dw_read_done <= 1;
                 end
                 
@@ -280,18 +260,8 @@ always @(posedge clk or negedge rst_n) begin
                 addrb_0        <= {INPUT_CHANNEL{1'b0}};
                 addra_1        <= {ADDR_CHANNEL{1'b0}};
                 
-                if(layer_state == LAYER_8) begin
-                    addra_biassubam_0 <= LAYER_8_PW_2_OFFSET;
-                    addra_wdivstd_0   <= LAYER_8_PW_2_OFFSET;
-                end
-                else if(layer_state == LAYER_9) begin
-                    addra_biassubam_0 <= LAYER_9_PW_2_OFFSET;
-                    addra_wdivstd_0   <= LAYER_9_PW_2_OFFSET;      
-                end
-                else if(layer_state == LAYER_10) begin
-                    addra_biassubam_0 <= LAYER_10_PW_2_OFFSET;
-                    addra_wdivstd_0   <= LAYER_10_PW_2_OFFSET;      
-                end
+                addra_biassubam_0 <= LAYER_8_PW_2_OFFSET;
+                addra_wdivstd_0   <= LAYER_8_PW_2_OFFSET;
 
                 mean_run<=1'b0; std_run<=1'b0; weight_run<=1'b0; bias_run<=1'b0;
                 mean_phase<=6'd0; std_phase<=6'd0; weight_phase<=6'd0; bias_phase<=6'd0;
@@ -304,13 +274,19 @@ always @(posedge clk or negedge rst_n) begin
                 // BRAM_B, BRAM_W2
                 if (enb_1) begin
                     addrb_1  <= (addrb_1 >= 9'd383) ? {ADDR_CHANNEL{1'b0}} : addrb_1 + 1'b1;
-                    addra_w2 <= addra_w2 + 1'b1;
+                    if(addra_w2 == 24575) begin 
+                        addra_w2 <= 0;
+                    end
+                    else begin
+                        addra_w2 <= addra_w2 + 1'b1;
+                    end
                 end 
                 else begin
                     addrb_1  <= {ADDR_CHANNEL{1'b0}};
+                    addra_w2 <= {ADDR_WMEM{1'b0}};
                 end
                     
-                if((addra_w2 == LAYER_9_W2_OFFSET || addra_w2 == LAYER_10_W2_OFFSET) && (layer_state == LAYER_8)) begin
+                if(addra_w2 == 15'd24575) begin
                     pw_2_read_done <= 1;
                 end
                

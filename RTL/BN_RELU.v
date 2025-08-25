@@ -156,18 +156,12 @@ endgenerate
 ///////////////////////////////////////////////////////
 always @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
-        bn_channel_num <= {ADDR_CHANNEL{1'b0}};
+        bn_channel_num <= 0;
     end else begin
-        if(state == IDLE) begin
-            bn_channel_num <= 0;
+        if (bn_save_cnt == 5'd27) begin
+            if (bn_channel_num == 9'd383) bn_channel_num <= {ADDR_CHANNEL{1'b0}};
+            else                          bn_channel_num <= bn_channel_num + 1'b1;
         end
-        else begin
-            if (bn_save_cnt == 5'd27) begin
-                if (bn_channel_num == 9'd383) bn_channel_num <= {ADDR_CHANNEL{1'b0}};
-                else                          bn_channel_num <= bn_channel_num + 1'b1;
-            end
-        end
-
     end
 end
 
@@ -220,6 +214,7 @@ generate
     for (p = 0; p < 7; p = p + 1) begin : BN_UNIT
         NEW_BN_RELU_SINGLE #(.IO_WIDTH(IO_WIDTH)) u_bn (
             .clk       (clk),
+            .rst_n     (rst_n),
             .bn_en     (bn_en),
             .biassubam (biassubam),
             .wdivstd   (wdivstd),

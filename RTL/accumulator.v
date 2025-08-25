@@ -147,10 +147,7 @@ always @(posedge clk or negedge rst_n) begin
             end
 
             PW_1: begin
-                
-                
-                
-                
+
                 for (k = 0; k < PIXEL; k = k + 1) begin
                     if (acc_cnt >= 9'd63)  acc_out_reg[k] <= mul_out_reg[k];      
                     else                   acc_out_reg[k] <= acc_out_reg[k] + mul_out_reg[k];
@@ -168,7 +165,6 @@ always @(posedge clk or negedge rst_n) begin
                         else                             channel_num <= channel_num + 1'b1;
                     end
                 end else begin
-                    for (k = 0; k < PIXEL; k = k + 1) acc_out_reg[k] <= 0;
                     acc_cnt     <= 0;
                     pw_1_valid  <= 0;
                     pw_1_done   <= 0;
