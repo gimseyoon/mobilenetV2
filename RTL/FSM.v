@@ -4,12 +4,10 @@ module FSM(
     input               clk,
     input               rst_n,
     input               start,
-    input               new_start,
     input               pw_1_bn_relu_done,
     input               dw_bn_relu_done,
     input               skip_done,     // layer_8_done
-    output reg  [2:0]  state,
-    output reg  [1:0]  layer_state
+    output reg  [2:0]  state
 );
 
 /////////////////////////////////////////////////////// 
@@ -33,18 +31,15 @@ localparam READY    = 2'b00,
 // Next-state register
 ///////////////////////////////////////////////////////
 reg [2:0] next_state;
-reg [1:0] next_layer_state;
 /////////////////////////////////////////////////////// 
 // State register
 ///////////////////////////////////////////////////////
 always @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
         state <= IDLE;
-        layer_state <= READY;
     end
     else begin
         state <= next_state;
-        layer_state <= next_layer_state;
     end
 end
 
@@ -54,7 +49,7 @@ end
 always @(*) begin
     next_state = state;
     case (state)
-        IDLE:     if (start || new_start)   next_state = PW_1; 
+        IDLE:     if (start)   next_state = PW_1; 
         PW_1:     if (pw_1_bn_relu_done)    next_state = PW_1_RST;
         PW_1_RST:                           next_state = DW;
         DW:       if (dw_bn_relu_done)      next_state = DW_RST; 
@@ -68,17 +63,6 @@ always @(*) begin
     endcase
 end
 
-always @(*) begin
-    next_layer_state = layer_state;
-    case (layer_state)
-        READY:       if (start || new_start)    next_layer_state = LAYER_8; else next_layer_state = next_layer_state; 
-        LAYER_8:     if (new_start)             next_layer_state = LAYER_9; else next_layer_state = next_layer_state; 
-        LAYER_9:     if (new_start)             next_layer_state = LAYER_10; else next_layer_state = next_layer_state; 
-        LAYER_10:    if (new_start)             next_layer_state = READY; else next_layer_state = next_layer_state; 
-
-        default: next_layer_state = READY;
-    endcase
-end
 
 
 

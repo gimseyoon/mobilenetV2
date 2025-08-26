@@ -13,12 +13,12 @@ module mobilenetV2 #(
     parameter ADDR_WMEM = $clog2(384 * 64),       // 15 (for 64*384 = 24576)
     parameter ADDR_W1_MEM = $clog2(384 * 9)       // 12 (for 9*384 = 3456)
 )(
-    //input clk_in,
-    input clk,
+    input clk_in,
+    //input clk,
     input rst,
     input start,
-    output result_save_valid_o,
-    output signed [3527:0] result_o,
+    //output result_save_valid_o,
+    //output signed [3527:0] result_o,
     output reg [13: 0] layer_8_result,
     output reg all_done
 );
@@ -43,9 +43,8 @@ module mobilenetV2 #(
 /////////////////////////////////////////////////////////////
 
 
-    //wire clk;
+    wire clk;
     wire locked;
-    reg  new_start;
     wire rst_n_sync;
     
 
@@ -53,7 +52,6 @@ module mobilenetV2 #(
 /////////////////////////////////////////////////////////////
 // FSM
     wire [2:0] state;
-    wire [1:0] layer_state;
 
 //////////////////////////////////////////////////
 // multiplier
@@ -210,23 +208,8 @@ end
             layer_8_result[j] <= result[(j * 18 * 14) + 17];
         end  
     end
-/*
-//////////////////////////////////////////////////
-// new_start ( layer (9, 10) )
-    always@(posedge clk or negedge rst_n) begin
-        if(!rst_n) begin
-            new_start <= 0;
-        end
-        else begin
-            if(skip_done) begin
-                new_start <= 1;
-            end
-            else begin
-                new_start <= 0;
-            end
-        end // rst_n
-    end //always
-*/
+
+
 //////////////////////////////////////////////////
 // sk_in_1, sk_in_2    
     assign sk_in_1 = (skip_valid) ? doutb_0 : 0;
@@ -313,12 +296,10 @@ FSM FSM_0 (
     .clk                (clk),
     .rst_n              (rst_n_sync),
     .start              (start_rise),
-    .new_start          (new_start),
     .pw_1_bn_relu_done  (pw_1_bn_relu_done),
     .dw_bn_relu_done    (dw_bn_relu_done),
     .skip_done          (skip_done),  
-    .state              (state),
-    .layer_state        (layer_state)
+    .state              (state)
 );
     
 
@@ -328,7 +309,6 @@ FSM FSM_0 (
 glbl_ctrl glbl_ctrl_0 (
     .clk                (clk),
     .rst_n              (rst_n_sync),
-    .layer_state        (layer_state),
     .state              (state),
     .save_valid         (save_valid),
     .skip_valid         (skip_valid),
@@ -504,7 +484,7 @@ bram_w_div_std bram_w_div_std_0 (
 );
 /////////////////////////////////////////////////////////////
 
-/*
+
 clk_wiz_0 clk_100_0 (
     // Clock out ports
     .clk_100(clk),     // output clk_100
@@ -512,8 +492,9 @@ clk_wiz_0 clk_100_0 (
     .reset(rst), // input reset
     .locked(locked),       // output locked
    // Clock in ports
-    .clk_in1(clk_in));      // input clk_in1
-*/
+    .clk_in1(clk_in)
+);      // input clk_in1
+
 
 
 /*
@@ -546,7 +527,5 @@ ila_1 ila_1_test (
 	.probe22(rst_n_sync) // input wire [0:0]  probe22
 );
 */
-
-
 
 endmodule

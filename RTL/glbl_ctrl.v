@@ -15,7 +15,6 @@ module glbl_ctrl #(
     input                                   clk,
     input                                   rst_n,
     input           [2:0]                   state,
-    input           [1:0]                   layer_state,
     input                                   save_valid,
     input                                   skip_valid,
     input   signed  [IO_WIDTH*PIXEL-1:0]    acc_out,
@@ -81,7 +80,6 @@ localparam READY    = 2'b00,
 // Global counter (0..32767)
 ///////////////////////////////////////////////////////
 reg  [2:0] local_state;
-reg  [1:0] local_layer_state;
 wire pw_1_read_done;
 wire dw_read_done;
 wire pw_2_read_done;
@@ -93,10 +91,8 @@ wire pw_2_read_done;
 always @(posedge clk or negedge rst_n) begin
     if (!rst_n) begin
         local_state <= 0;
-        local_layer_state <= 0;
     end else begin
         local_state <= state;
-        local_layer_state <= layer_state;
     end
 end
 
@@ -110,7 +106,6 @@ addr_counter addr_counter_0 (
     .clk                (clk),
     .rst_n              (rst_n),
     .state              (local_state),
-    .layer_state        (local_layer_state),
     .save_valid         (save_valid),
     .skip_valid         (skip_valid),
     .result_save_valid (result_save_valid),

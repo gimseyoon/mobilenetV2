@@ -16,7 +16,6 @@ module addr_counter #(
     input                           clk,
     input                           rst_n,
     input         [2:0]             state,
-    input         [1:0]             layer_state,
     input                           save_valid,
     input                           skip_valid,
     input                           result_save_valid,
@@ -137,20 +136,9 @@ always @(posedge clk or negedge rst_n) begin
                 addra_w0        <= 0;
                 addra_w1        <= 0;
                 addra_w2        <= 0;
-                if(layer_state == LAYER_8) begin
-                    addra_biassubam_0 <= 0;
-                    addra_wdivstd_0   <= 0;
-                end
-                else if(layer_state == LAYER_9) begin
-                    addra_biassubam_0 <= LAYER_9_PW_1_OFFSET;
-                    addra_wdivstd_0   <= LAYER_9_PW_1_OFFSET;      
-                end
-                else if(layer_state == LAYER_10) begin
-                    addra_biassubam_0 <= LAYER_10_PW_1_OFFSET;
-                    addra_wdivstd_0   <= LAYER_10_PW_1_OFFSET;      
-                end
+                addra_biassubam_0 <= 0;
+                addra_wdivstd_0   <= 0;
             end
-
             ///////////////////////////////////////////////////////
             // PW_1
             ///////////////////////////////////////////////////////
